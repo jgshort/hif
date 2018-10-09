@@ -11,7 +11,6 @@ typedef enum hif_feel {
 	HIF_BAD,
 	HIF_MEH,
 	HIF_WOO,
-
 	HIF_COMMAND
 } hif_feel;
 
@@ -20,23 +19,25 @@ typedef struct hif_command {
 	fn_command command;
 } hif_command;
 
-static void print_help() {
-	fprintf(stderr, "Sorry bud, you need to tell me how you feel today.\n");
-	fprintf(stderr, "Try one of these:\n");
-	fprintf(stderr, "- bad\n- meh\n- woo\n\n");
-	fprintf(stderr, "Example:\n");
-	fprintf(stderr, "\t$ hif woo\n\n");
-	fprintf(stderr, "\nOr try:\n");
-	fprintf(stderr, "\tcount        - Return a count of feels.\n");
-	fprintf(stderr, "\tjson         - Dump feels in json format.\n");
-	fprintf(stderr, "\tdelete {id}  - Delete feel by provided id, i.e:\n\t\t$ hif delete 1\n\n");
-	fprintf(stderr, "\thelp         - Print this message.\n");
-	fprintf(stderr, "\tversion      - Print hif version information.\n");
-	fprintf(stderr, "\n");
+static void print_help(FILE *out) {
+	if(out == stderr) {
+		fprintf(out, "Sorry bud, you need to tell me how you feel today.\n");
+		fprintf(out, "Try one of these:\n");
+		fprintf(out, "- bad\n- meh\n- woo\n\n");
+		fprintf(out, "Example:\n");
+		fprintf(out, "\t$ hif woo\n\n");
+		fprintf(out, "\nOr try:\n");
+	}
+	fprintf(out, "\tcount        - Return a count of feels.\n");
+	fprintf(out, "\tjson         - Dump feels in json format.\n");
+	fprintf(out, "\tdelete {id}  - Delete feel by provided id, i.e:\n\t\t$ hif delete 1\n\n");
+	fprintf(out, "\thelp         - Print this message.\n");
+	fprintf(out, "\tversion      - Print hif version information.\n");
+	fprintf(out, "\n");
 }
 
-static int create_table_fn(void *unused, int argc, char **argv, char **col) {
-	unused = unused;
+static int create_table_fn(void *data, int argc, char **argv, char **col) {
+	data = data;
 	int i;
 	for(i = 0; i < argc; i++) {
 		fprintf(stdout, "%s = %s\n", col[i], argv[i] ? argv[i] : "NULL");
@@ -45,7 +46,8 @@ static int create_table_fn(void *unused, int argc, char **argv, char **col) {
 	return 0;
 }
 
-static int insert_fn(void *NotUsed, int argc, char **argv, char **col) {
+static int insert_fn(void *data, int argc, char **argv, char **col) {
+	data = data;
 	int i;
 	for(i = 0; i<argc; i++) {
 		printf("%s = %s\n", col[i], argv[i] ? argv[i] : "NULL");
@@ -54,12 +56,13 @@ static int insert_fn(void *NotUsed, int argc, char **argv, char **col) {
 	return 0;
 }
 
-static int delete_fn(void *NotUsed, int argc, char **argv, char **col) {
+static int delete_fn(void *data, int argc, char **argv, char **col) {
+	data = data;
 	int i;
-	for(i = 0; i<argc; i++) {
-		printf("%s = %s\n", col[i], argv[i] ? argv[i] : "NULL");
+	for(i = 0; i < argc; i++) {
+		fprintf(stdout, "%s = %s\n", col[i], argv[i] ? argv[i] : "NULL");
 	}
-	printf("\n");
+	fprintf(stdout, "Delete\n");
 	return 0;
 }
 
@@ -128,8 +131,15 @@ static int delete_command(sqlite3 *db, void *payload) {
 	char * err_msg = NULL;
 	char * sql = NULL;
 
-	asprintf(&sql, "delete from hif_feels where feel_id = %i;", (int)id);
+	asprintf(&sql, "delete from hif_feels where feel_id = %i; " \
+		" select feel_id from hif_feels where feel_id = %i;", id, id);
 	int rc = sqlite3_exec(db, sql, &delete_fn, 0, &err_msg);
+	
+	if(rc != SQLITE_OK) {
+		fprintf(stderr, "Feel %i not deleted.\n", (int)id);
+	} else {
+		fprintf(stdout, "Feel deleted!\n");
+	}
 
 	free(sql);
 
@@ -218,13 +228,13 @@ static hif_command str_to_command(const char * s) {
 		command.feel = HIF_COMMAND;
 		command.command = &count_command;
 	} else if(strncmp(s, "help", 4) == 0) {
-		print_help();
+		print_help(stdout);
 		exit(0);
 	} else if(strncmp(s, "version", 7) == 0) {
 		fprintf(stdout, "hif v1.0.0\n");
 		exit(0);
 	} else {
-		print_help();
+		print_help(stderr);
 		exit(-1);
 	}
 
@@ -238,7 +248,7 @@ int main(int argc, char **argv) {
 	hif_command command;
 
 	if(argc < 2) {
-		print_help();
+		print_help(stderr);
 		goto err0;
 	}
 
@@ -283,12 +293,11 @@ int main(int argc, char **argv) {
 		rc = command.command(db, NULL);
 	} else if(command.command == &delete_command) {
 		if(argc < 3) {
-			print_help();
+			print_help(stderr);
 			goto err1;
 		}
 		int id = atoi(argv[2]);
 		rc = command.command(db, (void*)(long)id);
-		fprintf(stdout, "Feel removed.\n");
 	} else {
 		rc = command.command(db, NULL);
 	}
