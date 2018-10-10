@@ -87,8 +87,10 @@ static int create_storage(storage_adapter const * adapter, char const * context_
 	rc = sqlite3_exec(db, sql, &create_table_fn, 0, &err_msg);	
 	if(rc != SQLITE_OK) goto err1;
 
+	goto err0;
 err2:
 err1:
+	fprintf(stderr, "Failed to create context %s, '%s'\n", context_name, err_msg);
 err0:
 	sqlite3_close(db);
 	free(path);
