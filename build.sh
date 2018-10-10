@@ -1,1 +1,1 @@
-clang hif.c -o hif -l sqlite3
+clang environment.c storage_adapter.c hif.c -o hif -l sqlite3
