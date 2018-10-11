@@ -16,6 +16,8 @@ static int insert_feel(storage_adapter const * adapter, char const * feel, char 
 static int delete_feel(storage_adapter const * adapter, int id);
 static int count_feels(storage_adapter const * adapter);
 
+static int export(storage_adapter const * adapter, kvp_handler kvp);
+
 static int create_table_fn(void * data, int argc, char **argv, char **col);
 static int insert_fn(void *data, int argc, char **argv, char **col);
 
@@ -44,6 +46,8 @@ storage_adapter const * storage_adapter_init(storage_adapter * adapter) {
 	adapter->insert_feel = &insert_feel;
 	adapter->delete_feel = &delete_feel;
 	adapter->count_feels = &count_feels;
+
+	adapter->export = &export;
 
 	return adapter;
 }
@@ -230,3 +234,69 @@ static int count_feels(storage_adapter const * adapter) {
 	int count = query_table_row_count(adapter->data->db, "hif_feels");
 	return count;
 }
+
+static int to_kvp(char const * key, char const * value, int is_numeric) {
+	fprintf(stdout, "\"%s\": ", key);
+	if(is_numeric) {
+		fprintf(stdout, "%s", value);
+	} else {
+		fprintf(stdout, "\"%s\"", value);
+	}
+
+	return 0;
+}
+
+static int export(storage_adapter const * adapter, kvp_handler kvp) {
+	int count = count_feels(adapter);
+	if(count < 0) { exit(-1); }
+
+	fprintf(stdout, "%i\n", count);
+
+	sqlite3_stmt * stmt = NULL;
+	sqlite3 *db = adapter->data->db;
+
+	if(!kvp) kvp = &to_kvp;
+
+	char * sql = "select s.status 'feel', s.description 'description', f.dtm 'datetime' "\
+		      "from hif_feels f inner join hif_statuses s on f.feel = s.status_id;";
+
+	fprintf(stdout, "{\n");
+	fprintf(stdout, "\t\"feels\": [");
+	if(count > 0) fprintf(stdout, "\n");
+	int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+	if(rc != SQLITE_OK) goto err2;
+
+	int i = 0;
+	int col_count = sqlite3_column_count(stmt);
+
+	while(sqlite3_step(stmt) == SQLITE_ROW) {
+		int col = 0;
+
+		fprintf(stdout, "\t\t{ ");
+		while(col < col_count) {
+			char const * key = (char const *)sqlite3_column_name(stmt, col);
+			char const * value = (char const *)sqlite3_column_text(stmt, col);
+			int type = sqlite3_column_type(stmt, col);
+
+			kvp(key, value, (type == SQLITE_INTEGER || type == SQLITE_FLOAT));
+			
+			if(col < col_count - 1) fprintf(stdout, ", ");
+			col++;
+		}
+		i++;
+		if(i < count) fprintf(stdout, " },\n");
+		else fprintf(stdout, " }\n");
+
+	}
+
+	sqlite3_finalize(stmt);
+	if(count > 0) fprintf(stdout, "\t");
+	fprintf(stdout, "]\n");
+	fprintf(stdout, "}\n");
+
+err2:
+err1:
+err0:
+	return rc;
+}
+

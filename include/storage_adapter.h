@@ -1,6 +1,8 @@
 #ifndef HIF_STORAGE_ADAPTER
 #define HIF_STORAGE_ADAPTER
 
+typedef int (*kvp_handler)(char const * key, char const * value, int is_numeric);
+
 typedef struct storage_adapter storage_adapter;
 
 storage_adapter const * storage_adapter_alloc();
@@ -16,6 +18,8 @@ typedef struct storage_adapter {
 	int (*insert_feel)(storage_adapter const * adapter, char const * feel, char **description);
 	int (*delete_feel)(storage_adapter const * adapter, int id);
 	int (*count_feels)(storage_adapter const * adapter);
+	
+	int (*export)(storage_adapter const * adapter, kvp_handler kvp);
 
 	void (*free)(storage_adapter * adapter);
 
