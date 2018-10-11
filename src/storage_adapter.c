@@ -12,7 +12,7 @@ static void close(storage_adapter const * adapter);
 
 static int create_feel(storage_adapter const * adapter, char const * feel, char const * description);
 
-static int insert_feel(storage_adapter const * adapter, hif_feel feel);
+static int insert_feel(storage_adapter const * adapter, char const * feel, char **description);
 static int delete_feel(storage_adapter const * adapter, int id);
 static int count_feels(storage_adapter const * adapter);
 
@@ -70,7 +70,8 @@ static int create_storage(storage_adapter const * adapter, char const * context_
 	int rc = sqlite3_open(path, &db);
 	if(rc != SQLITE_OK) goto err0;
 
-	char * sql = 
+	char * sql = NULL;
+	asprintf(&sql, 
 		"create table if not exists hif_statuses ("\
 			"status_id integer primary key, status text not null, description text"\
 		"); " \
@@ -82,7 +83,14 @@ static int create_storage(storage_adapter const * adapter, char const * context_
 		"create index if not exists hif_feels_feel_inx on hif_feels(feel); " \
 		"insert into hif_statuses (status, description) values ('bad', ':(');" \
 		"insert into hif_statuses (status, description) values ('meh', ':|');" \
-		"insert into hif_statuses (status, description) values ('woo', ':)');";
+		"insert into hif_statuses (status, description) values ('woo', ':)');"
+		\
+		"create table if not exists hif_contexts (" \
+			"context_id integer primary key, name text not null, path text not null" \
+		");" \
+		"create index if not exists hif_contexts_name_inx on hif_contexts(name);" \
+		"insert into hif_contexts (name, path) values ('%s', '%s');"
+		, context_name, path);
 
 	rc = sqlite3_exec(db, sql, &create_table_fn, 0, &err_msg);	
 	if(rc != SQLITE_OK) goto err1;
@@ -94,6 +102,7 @@ err1:
 err0:
 	sqlite3_close(db);
 	free(path);
+	free(sql);
 	
 	return rc;
 }
@@ -132,11 +141,11 @@ static int insert_fn(void *data, int argc, char **argv, char **col) {
 	return 0;
 }
 
-static int insert_feel(storage_adapter const * adapter, hif_feel feel) {
+static int insert_feel(storage_adapter const * adapter, char const * feel, char **description) {
 	char * sql = NULL;
 	char * err_msg;
 
-	asprintf(&sql, "insert into hif_feels (feel, dtm) values (%i, datetime('now'));", (int)feel);
+	asprintf(&sql, "insert into hif_feels (feel, dtm) values ((select status_id from hif_statuses where status = '%s'), datetime('now'));", feel);
 	int rc = sqlite3_exec(adapter->data->db, sql, &insert_fn, 0, &err_msg);
 
 	free(sql);
