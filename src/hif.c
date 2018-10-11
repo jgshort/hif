@@ -20,17 +20,20 @@ static void print_help(FILE * out) {
 	fprintf(out, "usage: hif [mood | command (args)*]\n\n");
 	if(out == stderr) {
 		fprintf(out, "Sorry bud, you need to tell me how you feel.\n");
-		fprintf(out, "I support the following moods:\n");
+		fprintf(out, "By default, I support the following moods:\n");
 		fprintf(out, "\tbad, meh, woo\n\n");
-		fprintf(out, "Example:\n");
-		fprintf(out, "\t$ hif woo\n");
+		fprintf(out, "... but you can create your own. Example:\n");
+		fprintf(out, "\t$ hif add woo\n");
 		fprintf(out, "\nOr try a command:\n");
 	}
-	fprintf(out, "\tcount        - Return a count of feels.\n");
-	fprintf(out, "\tjson         - Dump feels in json format.\n");
-	fprintf(out, "\tdelete {id}  - Delete feel by provided id, i.e:\n\t\t$ hif delete 1\n\n");
-	fprintf(out, "\thelp         - Print this message.\n");
-	fprintf(out, "\tversion      - Print hif version information.\n");
+	fprintf(out, "\tadd {feel}     - Add a new feel.\n");
+	fprintf(out, "\tjson           - Dump feels in json format.\n");
+	fprintf(out, "\tdelete {id}    - Delete feel by id, i.e:\n\t\t$ hif delete 1\n\n");
+	fprintf(out, "\tcount          - Return a count of feels.\n");
+	fprintf(out, "\tcreate-context - Create a new feels context database.\n");
+	fprintf(out, "\tcreate-feel    - Create a new feel.\n");
+	fprintf(out, "\thelp           - Print this message.\n");
+	fprintf(out, "\tversion        - Print hif version information.\n");
 	fprintf(out, "\n");
 }
 
