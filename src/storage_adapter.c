@@ -81,6 +81,7 @@ static int create_storage(storage_adapter const * adapter, char const * context_
 
 	char * sql = NULL;
 	asprintf(&sql, 
+		"pragma encoding = utf8;" \
 		"create table if not exists hif_statuses ("\
 			"status_id integer primary key, status text unique not null, description text"\
 		"); " \
@@ -92,7 +93,8 @@ static int create_storage(storage_adapter const * adapter, char const * context_
 		"create index if not exists hif_feels_feel_inx on hif_feels(feel); " \
 		"insert into hif_statuses (status, description) values ('bad', ':(');" \
 		"insert into hif_statuses (status, description) values ('meh', ':|');" \
-		"insert into hif_statuses (status, description) values ('woo', ':)');"
+		"insert into hif_statuses (status, description) values ('woo', ':)');" \
+		"insert into hif_statuses (status, description) values ('shrug', '🤷 Shrug ¯\\_(ツ)_/¯ Emoji');" \
 		\
 		"create table if not exists hif_contexts (" \
 			"context_id integer primary key, name text not null, path text not null" \
@@ -180,14 +182,7 @@ static int insert_feel(storage_adapter const * adapter, char const * feel, char 
 	rc = sqlite3_step(stmt);
 	if(rc == SQLITE_ROW) {
 		char const * desc = (char const *)sqlite3_column_text(stmt, 0);
-		if(desc) {
-			size_t len = strlen(desc);
-			if(len > 0) {
-				*description = malloc(len + 1);
-				strncpy(*description, desc, len);
-				(*description)[len] = 0;
-			}
-		}
+		*description = strdup(desc);
 		rc = SQLITE_OK;
 	} 
 
@@ -281,6 +276,71 @@ static int to_kvp(char const * key, char const * value, int is_numeric) {
 	return 0;
 }
 
+static char * alloc_json_escape_string(unsigned char const * source) {
+	if(!source) return NULL;
+
+	size_t source_len = strlen((char const *)source) + 1;
+	size_t len = source_len;
+
+	unsigned char const * c = source;
+	do {
+		switch(*c) {
+			case '\\':
+			case '"':
+			case '\b':
+			case '\t':
+			case '\n':
+			case '\f':
+			case '\r':
+				len += 1;
+				break;
+			default:
+				if(*c <= 32) {
+					len += sizeof("\\u0000") - 1;
+				}
+				break;
+		}
+	} while(++c && *c);
+
+	char * dest = malloc(len);
+	if(!dest) return NULL;
+
+	if(len == source_len) {
+		memcpy(dest, source, source_len);
+		dest[source_len - 1] = 0;
+		return dest;
+	}
+
+	char * d = dest;
+	c = source;
+	do {
+		switch(*c) {
+			case '\\':
+			case '"':
+			case '\b':
+			case '\t':
+			case '\n':
+			case '\f':
+			case '\r':
+				*d = '\\'; ++d;
+				*d = *c;
+				break;
+			default:
+				if((*c <= 31) || (*c == '\"') || (*c == '\\')) {
+					*d = '\\'; ++d; *d = 'u'; ++d;
+					sprintf(d, "%04x", *c);
+                    			d += 4;
+				} else {
+					*d = *c;
+				}
+				break;
+		}
+	} while(++d, ++c && *c);
+	*d = 0;
+
+	return dest;
+}
+
 static int export(storage_adapter const * adapter, kvp_handler kvp) {
 	int count = count_feels(adapter);
 	if(count < 0) { exit(-1); }
@@ -308,16 +368,19 @@ static int export(storage_adapter const * adapter, kvp_handler kvp) {
 		fprintf(stdout, "\t\t{ ");
 		while(col < col_count) {
 			char const * key = (char const *)sqlite3_column_name(stmt, col);
-			char const * value = (char const *)sqlite3_column_text(stmt, col);
+			unsigned char const * value = (unsigned char const *)sqlite3_column_text(stmt, col);
+
+			char * escaped = alloc_json_escape_string(value);
 			int type = sqlite3_column_type(stmt, col);
 
-			kvp(key, value, (type == SQLITE_INTEGER || type == SQLITE_FLOAT));
-			
+			kvp(key, escaped, (type == SQLITE_INTEGER || type == SQLITE_FLOAT));
+		
+			free(escaped), escaped = NULL;
 			if(col < col_count - 1) fprintf(stdout, ", ");
 			col++;
 		}
 		i++;
-		if(i < count) fprintf(stdout, " },\n");
+		if(i < count - 1) fprintf(stdout, " },\n");
 		else fprintf(stdout, " }\n");
 
 	}
