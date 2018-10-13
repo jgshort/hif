@@ -190,37 +190,40 @@ static command_fn fns[] = {
 
 int main(int argc, char **argv) {
 	static const char * const DB = "hif.db";
-
-	int ret = -1;
 	
 	int call_terminate_on_exit = initialize();
 	if(argc < 2) {
 		print_help(stderr);
-		exit(ret);
+		exit(-1);
 	}
+
+	int ret = -1;
+	storage_adapter const * adapter = NULL;
 
 	char *p = str_lower(argv[1]);
-	hif_command command = str_to_command(p);
 	
-	storage_adapter const * adapter = storage_adapter_alloc();
+	hif_command command = str_to_command(p);
+	if((command < HIF_COMMAND_CREATE) || command > HIF_COMMAND_EOF) goto err0;
+
+	adapter = storage_adapter_alloc();
 	if(!context_exists(DB)) {
-		adapter->create_storage(adapter, DB);
-	}
-	adapter->open_storage(adapter, DB);
-
-	if(command >= HIF_COMMAND_CREATE && command <= HIF_COMMAND_EOF) {
-		fns[command](adapter, argc, argv);
-	} else {
-		fprintf(stderr, "What?\n");
+		ret = adapter->create_storage(adapter, DB);
+		if(ret) goto err0;
 	}
 
-	adapter->close(adapter);
-	adapter->free((storage_adapter *)adapter);
+	ret = adapter->open_storage(adapter, DB);
+	if(ret) goto err0;
+
+	fns[command](adapter, argc, argv);
+	
+	ret = adapter->close(adapter);
+	if(ret) goto err0;
 
 	ret = 0;
 
-	if(call_terminate_on_exit) {
-		terminate();
-	}
+err0:
+	if(adapter) adapter->free((storage_adapter *)adapter);
+	if(call_terminate_on_exit) terminate();
+	
 	return ret;
 }
