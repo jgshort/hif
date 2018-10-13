@@ -26,14 +26,15 @@ static void print_help(FILE * out) {
 		fprintf(out, "\t$ hif add woo\n");
 		fprintf(out, "\nOr try a command:\n");
 	}
-	fprintf(out, "\tadd {feel}     - Add a new feel.\n");
-	fprintf(out, "\tjson           - Dump feels in json format.\n");
-	fprintf(out, "\tdelete {id}    - Delete feel by id, i.e:\n\t\t$ hif delete 1\n\n");
-	fprintf(out, "\tcount          - Return a count of feels.\n");
-	fprintf(out, "\tcreate-context - Create a new feels context database.\n");
-	fprintf(out, "\tcreate-feel    - Create a new feel.\n");
-	fprintf(out, "\thelp           - Print this message.\n");
-	fprintf(out, "\tversion        - Print hif version information.\n");
+	fprintf(out, "\tadd {feel}           - Add a new feel.\n");
+	fprintf(out, "\tdelete {id}          - Delete feel by id, i.e:\n\t\t$ hif delete 1\n\n");
+	fprintf(out, "\tdescribe-feel {feel} - Describe a feel\n");
+	fprintf(out, "\tjson                 - Dump feels in json format.\n");
+	fprintf(out, "\tcount                - Return a count of feels.\n");
+	fprintf(out, "\tcreate-context       - Create a new feels context database.\n");
+	fprintf(out, "\tcreate-feel          - Create a new feel.\n");
+	fprintf(out, "\thelp                 - Print this message.\n");
+	fprintf(out, "\tversion              - Print hif version information.\n");
 	fprintf(out, "\n");
 }
 
@@ -46,6 +47,8 @@ static char * str_lower(char * s) {
 static hif_command str_to_command(const char * s) {
 	if(*s == '+' || strncmp(s, "add", sizeof("add") - 1) == 0) {
 		return HIF_COMMAND_ADD_FEEL;
+	} else if(strncmp(s, "describe-feel", sizeof("describe-feel") - 1) == 0) {
+		return HIF_COMMAND_GET_FEEL_DESCRIPTION;
 	} else if(strncmp(s, "json", sizeof("json") - 1) == 0) {
 		return HIF_COMMAND_JSON;
 	} else if(strncmp(s, "delete", sizeof("delete") - 1) == 0) {
@@ -175,6 +178,26 @@ static void command_add_memo(storage_adapter const * adapter, int argc, char **a
 	(void)adapter; (void)argc; (void)argv;
 }
 
+static void command_get_feel_description(storage_adapter const * adapter, int argc, char **argv) {
+	if(argc < 3) {
+		print_help(stderr);
+		exit(-1);
+	}
+
+	char * feel = argv[2];
+	char * description = NULL;
+
+	int rc = adapter->get_feel_description(adapter, feel, &description);
+	if(rc) {
+		fprintf(stderr, "Feel not found; try list-feels\n");
+		exit(-1);
+	}
+
+	fprintf(stdout, "%s\n", description);
+
+	free(description), description = NULL;
+}
+
 typedef void (*command_fn)(storage_adapter const * adapter, int argc, char **argv);
 
 static command_fn fns[] = {
@@ -185,7 +208,8 @@ static command_fn fns[] = {
 	&command_create_feel, /* HIF_COMMAND_CREATE_FEEL */
 	&command_add_feel, /* HIF_COMMAND_ADD_FEEL */
 	&command_count_memos, /* HIF_COMMAND_COUNT_MEMOS */
-	&command_add_memo /* HIF_COMMAND_ADD_MEMO */
+	&command_add_memo, /* HIF_COMMAND_ADD_MEMO */
+	&command_get_feel_description /* HIF_COMMAND_GET_FEEL_DESCRIPTION */
 };
 
 int main(int argc, char **argv) {

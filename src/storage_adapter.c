@@ -12,6 +12,7 @@ static int open_storage(storage_adapter const * adapter, char const * context_na
 static int close(storage_adapter const * adapter);
 
 static int create_feel(storage_adapter const * adapter, char const * feel, char const * description);
+static int get_feel_description(storage_adapter const * adapter,  char const * feel, char **description);
 
 static int insert_feel(storage_adapter const * adapter, char const * feel, char **description);
 static int delete_feel(storage_adapter const * adapter, int id);
@@ -43,6 +44,8 @@ storage_adapter const * storage_adapter_init(storage_adapter * adapter) {
 	adapter->free = &storage_adapter_free;
 
 	adapter->create_feel = &create_feel;
+	adapter->get_feel_description = &get_feel_description;
+
 	adapter->insert_feel = &insert_feel;
 	adapter->delete_feel = &delete_feel;
 	adapter->count_feels = &count_feels;
@@ -159,74 +162,102 @@ static int close(storage_adapter const * adapter) {
 	return ret == SQLITE_OK;;
 }
 
-static int insert_feel(storage_adapter const * adapter, char const * feel, char **description) {
-	char * sql = NULL;
-	char * err_msg = NULL;
-	if(!feel) return -1;
-	
+static int get_feel_description(storage_adapter const * adapter,  char const * feel, char **description) {
+	char const * sql = "select description from hif_statuses where status = ?;";
+
 	sqlite3_stmt * stmt = NULL;
-
-	asprintf(&sql, "insert into hif_feels (feel, dtm) values (" \
-		"(select status_id from hif_statuses where status = '%s'), datetime('now')" \
-		");", feel);
-	int rc = sqlite3_exec(adapter->data->db, sql, NULL, 0, &err_msg);
-
-	asprintf(&sql, "select description from hif_statuses where status = '%s';", feel);
-
-	rc = sqlite3_prepare_v2(adapter->data->db, sql, -1, &stmt, NULL);
+	int rc = sqlite3_prepare_v2(adapter->data->db, sql, -1, &stmt, NULL);
 	if(rc != SQLITE_OK) goto err0;
+
+	rc = sqlite3_bind_text(stmt, 1, feel, -1, SQLITE_STATIC);
+	if(rc != SQLITE_OK) goto err1;
 
 	rc = sqlite3_step(stmt);
 	if(rc == SQLITE_ROW) {
 		char const * desc = (char const *)sqlite3_column_text(stmt, 0);
-		*description = strdup(desc);
+		if(desc) *description = strdup(desc);
 		rc = SQLITE_OK;
-	} 
+	}
 
+err1:
 	sqlite3_finalize(stmt);
 
 err0:
-	free(sql), sql = NULL;
+	return rc;
+}
+
+static int insert_feel(storage_adapter const * adapter, char const * feel, char **description) {
+	char const * sql = "insert into hif_feels (feel, dtm) values (" \
+		"(select status_id from hif_statuses where status = ?), datetime('now')" \
+		");";
+	
+	if(!feel) return -1;
+	
+	sqlite3_stmt * stmt = NULL;
+	int rc = sqlite3_prepare_v2(adapter->data->db, sql, -1, &stmt, NULL);
+	if(rc != SQLITE_OK) goto err0;
+
+	rc = sqlite3_bind_text(stmt, 1, feel, -1, SQLITE_STATIC);
+	if(rc != SQLITE_OK) goto err1;
+
+	rc = sqlite3_step(stmt);
+	if(rc != SQLITE_DONE) goto err1;
+
+	rc = adapter->get_feel_description(adapter, feel, description);
+
+err1:	
+	sqlite3_finalize(stmt), stmt = NULL;
+err0:
 
 	return rc == SQLITE_OK;
 }
 
 static int create_feel(storage_adapter const * adapter, char const * feel, char const * description) {
-	char * sql = NULL;
-	char * err_msg;
-	char * wrapped_description = NULL;
+	char const * sql = "insert into hif_statuses (status, description) values (?, ?);";
+	
+	if(!feel) return -1;
+	
+	sqlite3_stmt * stmt = NULL;
+	int rc = sqlite3_prepare_v2(adapter->data->db, sql, -1, &stmt, NULL);
+	if(rc != SQLITE_OK) goto err0;
 
-	if(!feel) {
-		return -1;
-	}
+	rc = sqlite3_bind_text(stmt, 1, feel, -1, SQLITE_STATIC);
+	if(rc != SQLITE_OK) goto err1;
 
-	if(!description) {
-		asprintf(&wrapped_description, "%s", "NULL");
-	}
-	else {
-		asprintf(&wrapped_description, "'%s'", description);
-	}
-	asprintf(&sql, "insert into hif_statuses (status, description) values ('%s', %s);", feel, wrapped_description);
-	int rc = sqlite3_exec(adapter->data->db, sql, NULL, 0, &err_msg);
+	rc = sqlite3_bind_text(stmt, 2, description, -1, SQLITE_STATIC);
+	if(rc != SQLITE_OK) goto err1;
 
-	free(wrapped_description), wrapped_description = NULL;
-	free(sql), sql = NULL;
+	rc = sqlite3_step(stmt);
+	if(rc != SQLITE_DONE) goto err1;
+
+	rc = SQLITE_OK;
+
+err1:
+	sqlite3_finalize(stmt), stmt = NULL;
+err0:
 
 	return rc == SQLITE_OK;
 }
 
 static int delete_feel(storage_adapter const * adapter, int id) {
-	char * err_msg = NULL;
-	char * sql = NULL;
-
-	asprintf(&sql, 
-		"delete from hif_feels where feel_id = %i; " \
-		" select feel_id from hif_feels where feel_id = %i;", id, id);
-
-	sqlite3 *db = adapter->data->db;
-	int rc = sqlite3_exec(db, sql, NULL, 0, &err_msg);
+	char const * sql = "delete from hif_feels where feel_id = ?; ";
 	
-	free(sql), sql = NULL;
+	sqlite3_stmt * stmt = NULL;
+	int rc = sqlite3_prepare_v2(adapter->data->db, sql, -1, &stmt, NULL);
+	if(rc != SQLITE_OK) goto err0;
+
+	rc = sqlite3_bind_int(stmt, 1, id);
+	if(rc != SQLITE_OK) goto err1;
+
+	rc = sqlite3_step(stmt);
+	if(rc != SQLITE_DONE) goto err1;
+
+	rc = SQLITE_OK;
+
+err1:
+	sqlite3_finalize(stmt);
+
+err0:
 	return rc == SQLITE_OK;
 }
 
