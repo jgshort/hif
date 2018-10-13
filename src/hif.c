@@ -44,7 +44,6 @@ static char * str_lower(char * s) {
 }
 
 static hif_command str_to_command(const char * s) {
-	hif_command feel;
 	if(*s == '+' || strncmp(s, "add", sizeof("add") - 1) == 0) {
 		return HIF_COMMAND_ADD_FEEL;
 	} else if(strncmp(s, "json", sizeof("json") - 1) == 0) {
@@ -67,17 +66,18 @@ static hif_command str_to_command(const char * s) {
 		print_help(stderr);
 		exit(-1);
 	}
-
-	exit(-1);
 }
 
 static void terminate() {
-	char * config_path = get_config_path();
-	free(config_path);
+	char const * config_path = get_config_path();
+	free((void *)config_path);
+
+	sqlite3_shutdown();
 }
 
 static int initialize() {
 	int ret = atexit(terminate);
+	sqlite3_initialize();
 	ensure_config_path();
 	
 	return ret;
@@ -93,6 +93,9 @@ static void command_create(storage_adapter const * adapter, int argc, char **arg
 }
 
 static void command_count_feels(storage_adapter const * adapter, int argc, char **argv) {
+	(void)argc;
+	(void)argv;
+
 	int count = adapter->count_feels(adapter);
 	fprintf(stdout, "%i\n", count);
 }
@@ -126,6 +129,7 @@ static void command_add_feel(storage_adapter const * adapter, int argc, char **a
 }
 
 static void command_export(storage_adapter const * adapter, int argc, char **argv) {
+	(void)argc; (void)argv;
 	adapter->export(adapter, NULL);
 }
 
@@ -164,11 +168,11 @@ static void command_create_feel(storage_adapter const * adapter, int argc, char 
 }
 
 static void command_count_memos(storage_adapter const * adapter, int argc, char **argv) {
-
+	(void)adapter; (void)argc; (void)argv;
 }
 
 static void command_add_memo(storage_adapter const * adapter, int argc, char **argv) {
-
+	(void)adapter; (void)argc; (void)argv;
 }
 
 typedef void (*command_fn)(storage_adapter const * adapter, int argc, char **argv);
@@ -185,46 +189,36 @@ static command_fn fns[] = {
 };
 
 int main(int argc, char **argv) {
-	sqlite3 * db = NULL;
-	char * err_msg = NULL, * sql = NULL;
-	int rc = 0, ret = -1;
+	static const char * const DB = "hif.db";
+
+	int ret = -1;
 	
 	int call_terminate_on_exit = initialize();
 	if(argc < 2) {
 		print_help(stderr);
-		goto err0;
+		exit(ret);
 	}
+
 	char *p = str_lower(argv[1]);
-
-	sqlite3_initialize();
-
 	hif_command command = str_to_command(p);
 	
 	storage_adapter const * adapter = storage_adapter_alloc();
-	if(!context_exists("hif.db")) {
-		adapter->create_storage(adapter, "hif.db");
+	if(!context_exists(DB)) {
+		adapter->create_storage(adapter, DB);
 	}
-	adapter->open_storage(adapter, "hif.db");
+	adapter->open_storage(adapter, DB);
 
 	if(command >= HIF_COMMAND_CREATE && command <= HIF_COMMAND_EOF) {
 		fns[command](adapter, argc, argv);
-	}
-	else {
+	} else {
 		fprintf(stderr, "What?\n");
 	}
 
 	adapter->close(adapter);
 	adapter->free((storage_adapter *)adapter);
 
-	goto err1;
-
 	ret = 0;
-err3:
-err2:
-err1:
-	sqlite3_shutdown();
 
-err0:
 	if(call_terminate_on_exit) {
 		terminate();
 	}
