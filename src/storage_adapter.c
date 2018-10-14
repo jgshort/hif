@@ -15,7 +15,7 @@ static int create_feel(storage_adapter const * adapter, char const * feel, char 
 static int get_feel_description(storage_adapter const * adapter,  char const * feel, char **description);
 
 static int insert_feel(storage_adapter const * adapter, char const * feel, char **description);
-static int delete_feel(storage_adapter const * adapter, int id);
+static int delete_feel(storage_adapter const * adapter, int id, int * affected_rows);
 static int count_feels(storage_adapter const * adapter);
 
 static int insert_memo(storage_adapter const * adapter, char const * memo);
@@ -239,8 +239,8 @@ err0:
 	return rc == SQLITE_OK;
 }
 
-static int delete_feel(storage_adapter const * adapter, int id) {
-	char const * sql = "delete from hif_feels where feel_id = ?; ";
+static int delete_feel(storage_adapter const * adapter, int id, int * affected_rows) {
+	char const * sql = "delete from hif_feels where feel_id = ?;";
 	
 	sqlite3_stmt * stmt = NULL;
 	int rc = sqlite3_prepare_v2(adapter->data->db, sql, -1, &stmt, NULL);
@@ -251,6 +251,8 @@ static int delete_feel(storage_adapter const * adapter, int id) {
 
 	rc = sqlite3_step(stmt);
 	if(rc != SQLITE_DONE) goto err1;
+
+	*affected_rows = sqlite3_changes(adapter->data->db);
 
 	rc = SQLITE_OK;
 

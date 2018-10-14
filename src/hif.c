@@ -17,25 +17,38 @@ static void print_version(FILE * out) {
 
 static void print_help(FILE * out) {
 	print_version(out);	
-	fprintf(out, "usage: hif [mood | command (args)*]\n\n");
+	fprintf(out, "usage: hif [+emotion | command (args)*]\n\n");
 	if(out == stderr) {
 		fprintf(out, "Sorry bud, you need to tell me how you feel.\n");
-		fprintf(out, "By default, I support the following moods:\n");
-		fprintf(out, "\tbad, meh, woo\n\n");
-		fprintf(out, "... but you can create your own. Example:\n");
-		fprintf(out, "\t$ hif add woo\n");
 		fprintf(out, "\nOr try a command:\n");
 	}
-	fprintf(out, "\tadd {feel}           - Add a new feel.\n");
-	fprintf(out, "\tdelete {id}          - Delete feel by id, i.e:\n\t\t$ hif delete 1\n\n");
+	fprintf(out, "\nJournaling Commands\n");
+	fprintf(out, "\tadd {emotion}        - Journal a new feel with {emotion}.\n");
+	fprintf(out, "\t                       alias +, i.e. $ hif +sad\n");
+	fprintf(out, "\tdelete-feel {id}     - Delete a feel by id,\n");
+	
+	fprintf(out, "\nMetadata Commands\n");
 	fprintf(out, "\tdescribe-feel {feel} - Describe a feel\n");
-	fprintf(out, "\tjson                 - Dump feels in json format.\n");
-	fprintf(out, "\tcount                - Return a count of feels.\n");
+	fprintf(out, "\tcreate-emotion       - Create a new emotion.\n");
+	fprintf(out, "\tcount-feels          - Return a count of feels.\n");
 	fprintf(out, "\tcreate-context       - Create a new feels context database.\n");
-	fprintf(out, "\tcreate-feel          - Create a new feel.\n");
+
+	fprintf(out, "\nImport/Export Commands\n");
+	fprintf(out, "\texport-json          - Dump feels in json format.\n");
+	fprintf(out, "\n");
 	fprintf(out, "\thelp                 - Print this message.\n");
 	fprintf(out, "\tversion              - Print hif version information.\n");
 	fprintf(out, "\n");
+	fprintf(out, "Examples:\n");
+	fprintf(out, "\n");
+	fprintf(out, "Creating a new emotion:\n");
+	fprintf(out, "$ hif create-emotion \"love\" \"😍 Nothing but love!\"\n");
+
+	fprintf(out, "\n");
+	fprintf(out, "Journaling a happy feel:\n");
+	fprintf(out, "$ hif +love\n");
+
+	
 }
 
 static char * str_lower(char * s) {
@@ -49,15 +62,15 @@ static hif_command str_to_command(const char * s) {
 		return HIF_COMMAND_ADD_FEEL;
 	} else if(strncmp(s, "describe-feel", sizeof("describe-feel") - 1) == 0) {
 		return HIF_COMMAND_GET_FEEL_DESCRIPTION;
-	} else if(strncmp(s, "json", sizeof("json") - 1) == 0) {
+	} else if(strncmp(s, "export-json", sizeof("export-json") - 1) == 0) {
 		return HIF_COMMAND_JSON;
-	} else if(strncmp(s, "delete", sizeof("delete") - 1) == 0) {
+	} else if(strncmp(s, "delete-feel", sizeof("delete-feel") - 1) == 0) {
 		return HIF_COMMAND_DELETE_FEEL;
 	} else if(strncmp(s, "count-feels", sizeof("count-feels") - 1) == 0) {
 		return HIF_COMMAND_COUNT_FEELS;
 	} else if(strncmp(s, "create-context", sizeof("create-context") - 1) == 0) {
 		return HIF_COMMAND_CREATE;
-	} else if(strncmp(s, "create-feel", sizeof("create-feel") - 1) == 0) {
+	} else if(strncmp(s, "create-emotion", sizeof("create-emotion") - 1) == 0) {
 		return HIF_COMMAND_CREATE_FEEL;
 	} else if(strncmp(s, "help", sizeof("help") - 1) == 0) {
 		print_help(stdout);
@@ -123,7 +136,7 @@ static void command_add_feel(storage_adapter const * adapter, int argc, char **a
 	char * description = NULL;
 	int rc = adapter->insert_feel(adapter, feel, &description);
 	if(!rc) {
-		fprintf(stderr, "I'm not familiar with the feels '%s'. Try create-feel, first.\n", feel);
+		fprintf(stderr, "I'm not familiar with the feels '%s'. Try create-emotion, first.\n", feel);
 	} else {
 		fprintf(stdout, "Feels '%s' logged, %s\n", feel, description ? description : "(yay)");
 	}
@@ -142,10 +155,11 @@ static void command_delete_feel(storage_adapter const * adapter, int argc, char 
 		exit(1);
 	}
 	int id = atoi(argv[2]);
-	int rc = adapter->delete_feel(adapter, id);
+	int affected_rows = 0;
+	int rc = adapter->delete_feel(adapter, id, &affected_rows);
 
-	if(!rc) {
-		fprintf(stderr, "Feel with id %i not deleted; does not exist.\n", (int)id);
+	if(!rc || affected_rows == 0) {
+		fprintf(stderr, "Nothing to delete, feel id %i is not present!\n", (int)id);
 	} else {
 		fprintf(stdout, "Feel deleted!\n");
 	}
