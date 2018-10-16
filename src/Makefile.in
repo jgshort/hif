@@ -100,7 +100,7 @@ CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
 am_hif_OBJECTS = environment.$(OBJEXT) storage_adapter.$(OBJEXT) \
-	hif.$(OBJEXT)
+	memo_repository.$(OBJEXT) hif.$(OBJEXT)
 hif_OBJECTS = $(am_hif_OBJECTS)
 hif_LDADD = $(LDADD)
 AM_V_P = $(am__v_P_@AM_V@)
@@ -119,7 +119,7 @@ DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__maybe_remake_depfiles = depfiles
 am__depfiles_remade = ./$(DEPDIR)/environment.Po ./$(DEPDIR)/hif.Po \
-	./$(DEPDIR)/storage_adapter.Po
+	./$(DEPDIR)/memo_repository.Po ./$(DEPDIR)/storage_adapter.Po
 am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
@@ -247,7 +247,7 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AM_CPPFLAGS = -I$(top_srcdir)/include
-hif_SOURCES = environment.c storage_adapter.c hif.c
+hif_SOURCES = environment.c storage_adapter.c memo_repository.c hif.c
 all: all-am
 
 .SUFFIXES:
@@ -336,6 +336,7 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/environment.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hif.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/memo_repository.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/storage_adapter.Po@am__quote@ # am--include-marker
 
 $(am__depfiles_remade):
@@ -487,6 +488,7 @@ clean-am: clean-binPROGRAMS clean-generic mostlyclean-am
 distclean: distclean-am
 		-rm -f ./$(DEPDIR)/environment.Po
 	-rm -f ./$(DEPDIR)/hif.Po
+	-rm -f ./$(DEPDIR)/memo_repository.Po
 	-rm -f ./$(DEPDIR)/storage_adapter.Po
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
@@ -535,6 +537,7 @@ installcheck-am:
 maintainer-clean: maintainer-clean-am
 		-rm -f ./$(DEPDIR)/environment.Po
 	-rm -f ./$(DEPDIR)/hif.Po
+	-rm -f ./$(DEPDIR)/memo_repository.Po
 	-rm -f ./$(DEPDIR)/storage_adapter.Po
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
