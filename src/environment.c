@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <pwd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -7,6 +8,34 @@
 #include <string.h>
 
 #include "environment.h"
+
+#ifndef asprintf
+int asprintf(char **ret, const char *format, ...) {
+  va_list ap;
+  *ret = NULL;
+
+  va_start(ap, format);
+  int count = vsnprintf(NULL, 0, format, ap);
+  va_end(ap);
+
+  if(count >= 0) {
+    char * buffer = malloc(count + 1);
+    if(!buffer) return -1;
+
+    va_start(ap, format);
+    count = vsnprintf(buffer, count + 1, format, ap);
+    va_end(ap);
+
+    if(count < 0) {
+      free(buffer), buffer = NULL;
+      return count;
+    }
+    
+    *ret = buffer;
+  }
+  return count;
+}
+#endif
 
 char const * get_user_home() {
 	char const * home = getenv("HOME");
