@@ -3,6 +3,9 @@
 #include "storage_adapter.h"
 #include "memo_repository.h"
 
+static int delete_memo(memo_repository_interface const * repository, int id, int * affected_rows);
+static int insert_memo(memo_repository_interface const * repository, char const * memo, int * affected_rows);
+
 struct memo_repository_data;
 
 typedef struct memo_repository {
@@ -26,6 +29,9 @@ memo_repository_interface const * memo_repository_init(memo_repository_interface
 	((memo_repository *)repository)->data = data;
 
 	((memo_repository *)repository)->data->adapter = adapter;
+
+	repository->insert_memo = &insert_memo;	
+	repository->delete_memo = &delete_memo;
 	repository->free = &memo_repository_free;
 
 	return repository;
@@ -40,4 +46,13 @@ void memo_repository_free(memo_repository_interface const * repository) {
 	free((memo_repository *)repository), repository = NULL;
 }
 
+static int insert_memo(memo_repository_interface const * repository, char const * memo, int * affected_rows) {
+	storage_interface const * adapter = ((memo_repository *)repository)->data->adapter;
+	return adapter->insert_memo(adapter, memo, affected_rows);
+}
+
+static int delete_memo(memo_repository_interface const * repository, int id, int * affected_rows) {
+	storage_interface const * adapter = ((memo_repository *)repository)->data->adapter;
+	return adapter->delete_by_id(adapter, "hif_memos", id, affected_rows);
+}
 

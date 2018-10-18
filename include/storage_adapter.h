@@ -17,10 +17,9 @@ typedef struct storage_interface {
 	int (*count_feels)(storage_interface const * adapter);
 	
 	int (*insert_memo)(storage_interface const * adapter, char const * memo, int * affected_rows);
-	int (*delete_memo)(storage_interface const * adapter, int id, int * affected_rows);
 
 	int (*export)(storage_interface const * adapter, kvp_handler kvp);
-
+	int (*delete_by_id)(storage_interface const * adapter, char const * table_name,  int id, int * affected_rows);
 	void (*free)(storage_interface const * adapter);
 } storage_interface;
 

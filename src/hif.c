@@ -52,8 +52,6 @@ static void print_help(FILE * out) {
 	fprintf(out, "\n");
 	fprintf(out, "Journaling a happy feel:\n");
 	fprintf(out, "$ hif +love\n");
-
-	
 }
 
 static char * str_lower(char * s) {
@@ -225,7 +223,9 @@ static void command_delete_memo(storage_interface const * adapter, int argc, cha
 	}
 	int id = atoi(argv[2]);
 	int affected_rows = 0;
-	int rc = adapter->delete_memo(adapter, id, &affected_rows);
+
+	memo_repository_interface const * repository = memo_repository_alloc(adapter);
+	int rc = repository->delete_memo(repository, id, &affected_rows);
 
 	if(!rc || affected_rows == 0) {
 		fprintf(stderr, "Nothing to delete, memo id %i is not present!\n", (int)id);
