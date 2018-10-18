@@ -1,3 +1,18 @@
 hif.db
 hif
 *.swp
+Makefile.in
+aclocal.m4
+autom4te.cache
+autom4te.cache/**
+configure
+src/Makefile.in
+Makefile
+config.h
+config.log
+config.status
+src/.deps
+src/.deps/environment.Po src/.deps/hif.Po src/.deps/memo_repository.Po src/.deps/storage_adapter.Po
+src/Makefile
+src/*.o
+stamp-h1
