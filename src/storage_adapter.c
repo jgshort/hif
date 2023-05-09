@@ -21,9 +21,6 @@ static int insert_memo(storage_adapter const * adapter, char const * memo);
 
 static int export(storage_adapter const * adapter, kvp_handler kvp);
 
-static int create_table_fn(void * data, int argc, char **argv, char **col);
-static int insert_fn(void *data, int argc, char **argv, char **col);
-
 typedef struct storage_adapter_data {
 	sqlite3 *db;
 
@@ -70,16 +67,21 @@ void storage_adapter_free(storage_adapter * adapter) {
 static int create_storage(storage_adapter const * adapter, char const * context_name) {
 	char * err_msg = NULL;
 
+	(void)adapter;
+
 	if(!context_name) context_name = "hif.db";
 
 	char const * config_path = get_config_path();
 	char * path = alloc_concat_path(config_path, context_name);
 
+	char * sql = NULL;
 	sqlite3 * db = NULL;
 	int rc = sqlite3_open(path, &db);
-	if(rc != SQLITE_OK) goto err0;
+	if(rc != SQLITE_OK) {
+		(void)db;
+		goto err0;
+	}
 
-	char * sql = NULL;
 	asprintf(&sql, 
 		"pragma encoding = utf8;" \
 		"create table if not exists hif_statuses ("\
@@ -110,17 +112,20 @@ static int create_storage(storage_adapter const * adapter, char const * context_
 		");"
 		, context_name, path);
 
-	rc = sqlite3_exec(db, sql, &create_table_fn, 0, &err_msg);	
+	rc = sqlite3_exec(db, sql, NULL, 0, &err_msg);	
 	if(rc != SQLITE_OK) goto err1;
 
 	goto err0;
-err2:
+
 err1:
 	fprintf(stderr, "Failed to create context %s, '%s'\n", context_name, err_msg);
 err0:
 	sqlite3_close(db);
 	free(path), path = NULL;
-	free(sql), sql = NULL;
+
+	if(sql) {
+		free(sql), sql = NULL;
+	}
 	
 	return rc;
 }
@@ -151,20 +156,6 @@ static void close(storage_adapter const * adapter) {
 	}	
 }
 
-static int create_table_fn(void * data, int argc, char **argv, char **col) {
-	return 0;
-}
-
-static int insert_fn(void *data, int argc, char **argv, char **col) {
-	return 0;
-}
-
-/*
-static int select_description(void *data, int argc, char **argv, char **col) {
-	fprintf(stdout, "%s\n", argv[0]);
-	return 0;
-} */
-
 static int insert_feel(storage_adapter const * adapter, char const * feel, char **description) {
 	char * sql = NULL;
 	char * err_msg = NULL;
@@ -175,7 +166,7 @@ static int insert_feel(storage_adapter const * adapter, char const * feel, char 
 	asprintf(&sql, "insert into hif_feels (feel, dtm) values (" \
 		"(select status_id from hif_statuses where status = '%s'), datetime('now')" \
 		");", feel);
-	int rc = sqlite3_exec(adapter->data->db, sql, &insert_fn, 0, &err_msg);
+	int rc = sqlite3_exec(adapter->data->db, sql, NULL, 0, &err_msg);
 
 	asprintf(&sql, "select description from hif_statuses where status = '%s';", feel);
 
@@ -213,16 +204,12 @@ static int create_feel(storage_adapter const * adapter, char const * feel, char 
 		asprintf(&wrapped_description, "'%s'", description);
 	}
 	asprintf(&sql, "insert into hif_statuses (status, description) values ('%s', %s);", feel, wrapped_description);
-	int rc = sqlite3_exec(adapter->data->db, sql, &insert_fn, 0, &err_msg);
+	int rc = sqlite3_exec(adapter->data->db, sql, NULL, 0, &err_msg);
 
 	free(wrapped_description), wrapped_description = NULL;
 	free(sql), sql = NULL;
 
 	return rc == SQLITE_OK;
-}
-
-static int delete_fn(void *data, int argc, char **argv, char **col) {
-	return 0;
 }
 
 static int delete_feel(storage_adapter const * adapter, int id) {
@@ -234,7 +221,7 @@ static int delete_feel(storage_adapter const * adapter, int id) {
 		" select feel_id from hif_feels where feel_id = %i;", id, id);
 
 	sqlite3 *db = adapter->data->db;
-	int rc = sqlite3_exec(db, sql, &delete_fn, 0, &err_msg);
+	int rc = sqlite3_exec(db, sql, NULL, 0, &err_msg);
 	
 	free(sql), sql = NULL;
 	return rc == SQLITE_OK;
@@ -396,8 +383,6 @@ static int export(storage_adapter const * adapter, kvp_handler kvp) {
 	fprintf(stdout, "}\n");
 
 err2:
-err1:
-err0:
 	return rc;
 }
 
@@ -407,9 +392,8 @@ static int insert_memo(storage_adapter const * adapter, char const * memo) {
 
 	asprintf(&sql, "insert into hif_memos (memo, dtm) values ('%s', datetime('now'));", memo);
 
-	int rc = sqlite3_exec(adapter->data->db, sql, &insert_fn, 0, &err_msg);
+	int rc = sqlite3_exec(adapter->data->db, sql, NULL, 0, &err_msg);
 
-err0:
 	free(sql), sql = NULL;
 
 	return rc;

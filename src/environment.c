@@ -8,8 +8,8 @@
 
 #include "environment.h"
 
-const char * get_user_home() {
-	const char * home = getenv("HOME");
+char const * get_user_home() {
+	char const * home = getenv("HOME");
 	if(!home) {
 		struct passwd *pw = getpwuid(getuid());
 		home = pw->pw_dir;
@@ -18,11 +18,11 @@ const char * get_user_home() {
 	return home;
 }
 
-char * get_config_path() {
+char const * get_config_path() {
 	static char * config_path = NULL;
 
 	if(!config_path) {
-		const char * home = get_user_home();
+		char const * home = get_user_home();
 		
 		asprintf(&config_path, "%s/.config/hif", home);
 	}
@@ -30,8 +30,7 @@ char * get_config_path() {
 }
 
 void ensure_config_path() {
-	const char * home = get_user_home();
-	const char * config_path = get_config_path();
+	char const * config_path = get_config_path();
 
 	struct stat st = {0};
 	if (stat(config_path, &st) == -1) {
@@ -48,13 +47,13 @@ char * alloc_concat_path(char const * root_path, char const * path) {
 }
 
 int context_exists(char const * context_name) {
-	char * config_path = get_config_path();
+	char const * config_path = get_config_path();
 	char * full_path = alloc_concat_path(config_path, context_name);
 	
 	struct stat st = {0};
 	int exists = stat(full_path, &st) == 0; 
 
-	free(full_path);
+	free(full_path), full_path = NULL;
 
 	return exists;
 }
