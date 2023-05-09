@@ -15,6 +15,8 @@ typedef struct storage_adapter {
 	int (*close)(storage_adapter const *adapter);
 	
 	int (*create_feel)(storage_adapter const * adapter, char const * feel, char const * description);
+	int (*get_feel_description)(storage_adapter const * adapter,  char const * feel, char **description);
+
 	int (*insert_feel)(storage_adapter const * adapter, char const * feel, char **description);
 	int (*delete_feel)(storage_adapter const * adapter, int id);
 	int (*count_feels)(storage_adapter const * adapter);

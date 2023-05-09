@@ -17,6 +17,8 @@ typedef enum hif_command {
 
 	HIF_COMMAND_COUNT_MEMOS,
 	HIF_COMMAND_ADD_MEMO,
+	
+	HIF_COMMAND_GET_FEEL_DESCRIPTION,
 
 	HIF_COMMAND_EOF /* must be last */
 } hif_command;
