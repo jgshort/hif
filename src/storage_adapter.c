@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <sqlite3.h>
 
 #include "hif.h"
@@ -81,7 +82,7 @@ static int create_storage(storage_adapter const * adapter, char const * context_
 	char * sql = NULL;
 	asprintf(&sql, 
 		"create table if not exists hif_statuses ("\
-			"status_id integer primary key, status text not null, description text"\
+			"status_id integer primary key, status text unique not null, description text"\
 		"); " \
 		"create index if not exists hif_statuses_status_inx on hif_statuses(status); " \
 		\
@@ -153,16 +154,49 @@ static int insert_fn(void *data, int argc, char **argv, char **col) {
 	return 0;
 }
 
+/*
+static int select_description(void *data, int argc, char **argv, char **col) {
+	fprintf(stdout, "%s\n", argv[0]);
+	return 0;
+} */
+
 static int insert_feel(storage_adapter const * adapter, char const * feel, char **description) {
 	char * sql = NULL;
-	char * err_msg;
+	char * err_msg = NULL;
+	if(!feel) return -1;
+	
+	sqlite3_stmt * stmt = NULL;
 
-	asprintf(&sql, "insert into hif_feels (feel, dtm) values ((select status_id from hif_statuses where status = '%s'), datetime('now'));", feel);
+	asprintf(&sql, "insert into hif_feels (feel, dtm) values (" \
+		"(select status_id from hif_statuses where status = '%s'), datetime('now')" \
+		");", feel);
 	int rc = sqlite3_exec(adapter->data->db, sql, &insert_fn, 0, &err_msg);
 
+	asprintf(&sql, "select description from hif_statuses where status = '%s';", feel);
+
+	rc = sqlite3_prepare_v2(adapter->data->db, sql, -1, &stmt, NULL);
+	if(rc != SQLITE_OK) goto err0;
+
+	rc = sqlite3_step(stmt);
+	if(rc == SQLITE_ROW) {
+		char const * desc = (char const *)sqlite3_column_text(stmt, 0);
+		if(desc) {
+			size_t len = strlen(desc);
+			if(len > 0) {
+				*description = malloc(len + 1);
+				strncpy(*description, desc, len);
+				(*description)[len] = 0;
+			}
+		}
+		rc = SQLITE_OK;
+	} 
+
+	sqlite3_finalize(stmt);
+
+err0:
 	free(sql), sql = NULL;
 
-	return rc;
+	return rc == SQLITE_OK;
 }
 
 static int create_feel(storage_adapter const * adapter, char const * feel, char const * description) {
@@ -186,7 +220,7 @@ static int create_feel(storage_adapter const * adapter, char const * feel, char 
 	free(wrapped_description), wrapped_description = NULL;
 	free(sql), sql = NULL;
 
-	return rc;
+	return rc == SQLITE_OK;
 }
 
 static int delete_fn(void *data, int argc, char **argv, char **col) {
@@ -204,15 +238,8 @@ static int delete_feel(storage_adapter const * adapter, int id) {
 	sqlite3 *db = adapter->data->db;
 	int rc = sqlite3_exec(db, sql, &delete_fn, 0, &err_msg);
 	
-	if(rc != SQLITE_OK) {
-		fprintf(stderr, "Feel %i not deleted.\n", (int)id);
-	} else {
-		fprintf(stdout, "Feel deleted!\n");
-	}
-
 	free(sql), sql = NULL;
-
-	return rc;
+	return rc == SQLITE_OK;
 }
 
 static int query_table_row_count(sqlite3 * db, const char * table_name) {
@@ -263,7 +290,7 @@ static int export(storage_adapter const * adapter, kvp_handler kvp) {
 
 	if(!kvp) kvp = &to_kvp;
 
-	char * sql = "select s.status 'feel', s.description 'description', f.dtm 'datetime' "\
+	char * sql = "select f.feel_id 'id', s.status 'feel', s.description 'description', f.dtm 'datetime' "\
 		      "from hif_feels f inner join hif_statuses s on f.feel = s.status_id;";
 
 	fprintf(stdout, "{\n");
