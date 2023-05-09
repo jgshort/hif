@@ -21,7 +21,7 @@ line that it's often too much of a context switch to open a book or reference a
 phone.
 
 Right now `hif` is very primative... but I often add features that are useful
-to me. 
+to me.
 
 Maybe they'll be useful to you, too.
 
@@ -81,3 +81,8 @@ Journaling a happy feel:
 ```bash
 $ hif +love
 ```
+
+### License
+
+<a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-sa/4.0/88x31.png" /></a><br />This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>.
+
