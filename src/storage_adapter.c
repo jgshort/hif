@@ -9,7 +9,7 @@
 
 static int create_storage(storage_adapter const * adapter, char const * path);
 static int open_storage(storage_adapter const * adapter, char const * context_name);
-static void close(storage_adapter const * adapter);
+static int close(storage_adapter const * adapter);
 
 static int create_feel(storage_adapter const * adapter, char const * feel, char const * description);
 
@@ -143,17 +143,20 @@ err0:
 	return rc;
 }
 
-static void close(storage_adapter const * adapter) {
+static int close(storage_adapter const * adapter) {
+	int ret = -1;
 	if(adapter && adapter->data) {
 		storage_adapter_data * data = adapter->data;
 		if(data->is_open) {
 			sqlite3 *db = data->db;
 			if(db) {
-				sqlite3_close(db);
+				ret = sqlite3_close(db);
 			}
 			data->is_open = 0;
 		}
 	}	
+
+	return ret == SQLITE_OK;;
 }
 
 static int insert_feel(storage_adapter const * adapter, char const * feel, char **description) {
