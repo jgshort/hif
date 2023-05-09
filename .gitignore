@@ -16,3 +16,6 @@ src/.deps/environment.Po src/.deps/hif.Po src/.deps/memo_repository.Po src/.deps
 src/Makefile
 src/*.o
 stamp-h1
+.env
+.DS_Store
+public

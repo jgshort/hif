@@ -1,18 +1,37 @@
-# hif - How I Feel
+---
+title: "hif - How I Feel"
+---
 
-An emotional command line interface.
+# An Emotional Command Line Interface.
 
-## What?
+Hi, my name is Jason and I made a small command line interface to track
+my day-to-day feelings.
 
-![shrug](/media/shrug.png?raw=true "shrug")
+I wanted something that would allow me to throw a feeling into a database with
+very little effort. Here's what I came up with:
 
-I wanted a quick and easy command line interface to track my thoughts and
-feelings throughout the day in a way that felt natural to me. I spend a large
-portion of my day on the CLI, so I created `hif` to help me document my
-feelings over time.
+```bash
+$ hif +happy
+```
 
-As `hif` grew, I also added an easy way to create short journal entries (memos)
-to the `hif` database.
+It's important that I track my feelings over time to help me cope with a mental
+health issue. Some people keep journals, use web sites or apps, etc, which is
+pretty cool and useful! For me, however, I spend so much time on the command
+line that it's often too much of a context switch to open a book or reference a
+phone.
+
+Right now `hif` is very primative... but I often add features that are useful
+to me. 
+
+Maybe they'll be useful to you, too.
+
+## Where?
+
+![shrug](media/shrug.png?raw=true "shrug")
+
+`hif` source code is available on github, here: [https://github.com/jgshort/hif](https://github.com/jgshort/hif).
+
+Conveniently, I also track issues and features on github.
 
 ## Requirements
 
@@ -36,7 +55,7 @@ usage: `hif [+emotion | command (args)*]`
 
 ### Journaling Commands
 	memo {memo}          - Add a memo.
-	delete-memo {memo-id}- Delete a memo by id.
+	delete-memo {id}     - Delete a memo by id.
 
 ### Metadata Commands
 	describe-feel {feel} - Describe a feel.
