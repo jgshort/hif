@@ -15,3 +15,4 @@ int asprintf(char **ret, const char *format, ...);
 #endif
 
 #endif /* HIF_ENVIRONMENT */
+
