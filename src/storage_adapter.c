@@ -16,6 +16,8 @@ static int insert_feel(storage_adapter const * adapter, char const * feel, char 
 static int delete_feel(storage_adapter const * adapter, int id);
 static int count_feels(storage_adapter const * adapter);
 
+static int insert_memo(storage_adapter const * adapter, char const * memo);
+
 static int export(storage_adapter const * adapter, kvp_handler kvp);
 
 static int create_table_fn(void * data, int argc, char **argv, char **col);
@@ -46,6 +48,8 @@ storage_adapter const * storage_adapter_init(storage_adapter * adapter) {
 	adapter->insert_feel = &insert_feel;
 	adapter->delete_feel = &delete_feel;
 	adapter->count_feels = &count_feels;
+	
+	adapter->insert_memo = &insert_memo;
 
 	adapter->export = &export;
 
@@ -82,7 +86,7 @@ static int create_storage(storage_adapter const * adapter, char const * context_
 		"create index if not exists hif_statuses_status_inx on hif_statuses(status); " \
 		\
 		"create table if not exists hif_feels ("\
-			"feel_id integer primary key, feel int, dtm int, foreign key (feel) references hif_statuses(status_id)"\
+			"feel_id integer primary key, feel int, dtm int not null, foreign key (feel) references hif_statuses(status_id)"\
 		"); " \
 		"create index if not exists hif_feels_feel_inx on hif_feels(feel); " \
 		"insert into hif_statuses (status, description) values ('bad', ':(');" \
@@ -93,7 +97,11 @@ static int create_storage(storage_adapter const * adapter, char const * context_
 			"context_id integer primary key, name text not null, path text not null" \
 		");" \
 		"create index if not exists hif_contexts_name_inx on hif_contexts(name);" \
-		"insert into hif_contexts (name, path) values ('%s', '%s');"
+		"insert into hif_contexts (name, path) values ('%s', '%s');" \
+		\
+		"create table if not exists hif_memos (" \
+			"memo_id integer primary key, memo text not null, dtm int not null" \
+		");"
 		, context_name, path);
 
 	rc = sqlite3_exec(db, sql, &create_table_fn, 0, &err_msg);	
@@ -105,8 +113,8 @@ err1:
 	fprintf(stderr, "Failed to create context %s, '%s'\n", context_name, err_msg);
 err0:
 	sqlite3_close(db);
-	free(path);
-	free(sql);
+	free(path), path = NULL;
+	free(sql), sql = NULL;
 	
 	return rc;
 }
@@ -120,7 +128,7 @@ static int open_storage(storage_adapter const * adapter, char const * context_na
 	if(rc != SQLITE_OK) goto err0;
 
 err0:
-	free(path);
+	free(path), path = NULL;
 	return rc;
 }
 
@@ -152,7 +160,7 @@ static int insert_feel(storage_adapter const * adapter, char const * feel, char 
 	asprintf(&sql, "insert into hif_feels (feel, dtm) values ((select status_id from hif_statuses where status = '%s'), datetime('now'));", feel);
 	int rc = sqlite3_exec(adapter->data->db, sql, &insert_fn, 0, &err_msg);
 
-	free(sql);
+	free(sql), sql = NULL;
 
 	return rc;
 }
@@ -167,7 +175,7 @@ static int create_feel(storage_adapter const * adapter, char const * feel, char 
 	}
 
 	if(!description) {
-		asprintf(&wrapped_description, "%s", "NULL");;
+		asprintf(&wrapped_description, "%s", "NULL");
 	}
 	else {
 		asprintf(&wrapped_description, "'%s'", description);
@@ -175,8 +183,8 @@ static int create_feel(storage_adapter const * adapter, char const * feel, char 
 	asprintf(&sql, "insert into hif_statuses (status, description) values ('%s', %s);", feel, wrapped_description);
 	int rc = sqlite3_exec(adapter->data->db, sql, &insert_fn, 0, &err_msg);
 
-	free(wrapped_description);
-	free(sql);
+	free(wrapped_description), wrapped_description = NULL;
+	free(sql), sql = NULL;
 
 	return rc;
 }
@@ -202,7 +210,7 @@ static int delete_feel(storage_adapter const * adapter, int id) {
 		fprintf(stdout, "Feel deleted!\n");
 	}
 
-	free(sql);
+	free(sql), sql = NULL;
 
 	return rc;
 }
@@ -225,7 +233,7 @@ static int query_table_row_count(sqlite3 * db, const char * table_name) {
 	sqlite3_finalize(stmt);
 
 err0:
-	free(sql);
+	free(sql), sql = NULL;
 
 	return count;
 }
@@ -249,8 +257,6 @@ static int to_kvp(char const * key, char const * value, int is_numeric) {
 static int export(storage_adapter const * adapter, kvp_handler kvp) {
 	int count = count_feels(adapter);
 	if(count < 0) { exit(-1); }
-
-	fprintf(stdout, "%i\n", count);
 
 	sqlite3_stmt * stmt = NULL;
 	sqlite3 *db = adapter->data->db;
@@ -297,6 +303,20 @@ static int export(storage_adapter const * adapter, kvp_handler kvp) {
 err2:
 err1:
 err0:
+	return rc;
+}
+
+static int insert_memo(storage_adapter const * adapter, char const * memo) {
+	char * err_msg = NULL;
+	char * sql = NULL;
+
+	asprintf(&sql, "insert into hif_memos (memo, dtm) values ('%s', datetime('now'));", memo);
+
+	int rc = sqlite3_exec(adapter->data->db, sql, &insert_fn, 0, &err_msg);
+
+err0:
+	free(sql), sql = NULL;
+
 	return rc;
 }
 
