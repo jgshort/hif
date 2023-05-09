@@ -91,10 +91,13 @@ static int create_storage(storage_adapter const * adapter, char const * context_
 			"feel_id integer primary key, feel int, dtm int not null, foreign key (feel) references hif_statuses(status_id)"\
 		"); " \
 		"create index if not exists hif_feels_feel_inx on hif_feels(feel); " \
-		"insert into hif_statuses (status, description) values ('bad', ':(');" \
+		\
+		"insert into hif_statuses (status, description) values ('sad', ':(');" \
 		"insert into hif_statuses (status, description) values ('meh', ':|');" \
+		"insert into hif_statuses (status, description) values ('tired', '😫');" \
+		"insert into hif_statuses (status, description) values ('anxious', '😰');" \
 		"insert into hif_statuses (status, description) values ('woo', ':)');" \
-		"insert into hif_statuses (status, description) values ('shrug', '🤷 Shrug ¯\\_(ツ)_/¯ Emoji');" \
+		"insert into hif_statuses (status, description) values ('shrug', '🤷 ¯\\_(ツ)_/¯');" \
 		\
 		"create table if not exists hif_contexts (" \
 			"context_id integer primary key, name text not null, path text not null" \
@@ -367,15 +370,17 @@ static int export(storage_adapter const * adapter, kvp_handler kvp) {
 
 		fprintf(stdout, "\t\t{ ");
 		while(col < col_count) {
-			char const * key = (char const *)sqlite3_column_name(stmt, col);
+			unsigned char const * key = (unsigned char const *)sqlite3_column_name(stmt, col);
 			unsigned char const * value = (unsigned char const *)sqlite3_column_text(stmt, col);
 
-			char * escaped = alloc_json_escape_string(value);
+			char * escaped_key = alloc_json_escape_string(key);
+			char * escaped_value = alloc_json_escape_string(value);
 			int type = sqlite3_column_type(stmt, col);
 
-			kvp(key, escaped, (type == SQLITE_INTEGER || type == SQLITE_FLOAT));
+			kvp(escaped_key, escaped_value, (type == SQLITE_INTEGER || type == SQLITE_FLOAT));
 		
-			free(escaped), escaped = NULL;
+			free(escaped_key), escaped_key = NULL;
+			free(escaped_value), escaped_value = NULL;
 			if(col < col_count - 1) fprintf(stdout, ", ");
 			col++;
 		}

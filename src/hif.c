@@ -45,7 +45,7 @@ static char * str_lower(char * s) {
 
 static hif_command str_to_command(const char * s) {
 	hif_command feel;
-	if(strncmp(s, "add", sizeof("add") - 1) == 0) {
+	if(*s == '+' || strncmp(s, "add", sizeof("add") - 1) == 0) {
 		return HIF_COMMAND_ADD_FEEL;
 	} else if(strncmp(s, "json", sizeof("json") - 1) == 0) {
 		return HIF_COMMAND_JSON;
@@ -98,12 +98,23 @@ static void command_count_feels(storage_adapter const * adapter, int argc, char 
 }
 
 static void command_add_feel(storage_adapter const * adapter, int argc, char **argv) {
-	char * description = NULL;
-	if(argc < 3) {
+	if(argc < 2) {
 		print_help(stderr);
 		exit(-1);
 	}
-	char * feel = argv[2];
+
+	char * feel = argv[1];
+	if(*feel == '+') {
+		feel++;
+	} else {
+		if(argc < 3) {
+			print_help(stderr);
+			exit(-1);
+		}
+		feel = argv[2];
+	}
+	
+	char * description = NULL;
 	int rc = adapter->insert_feel(adapter, feel, &description);
 	if(!rc) {
 		fprintf(stderr, "I'm not familiar with the feels '%s'. Try create-feel, first.\n", feel);
@@ -179,12 +190,10 @@ int main(int argc, char **argv) {
 	int rc = 0, ret = -1;
 	
 	int call_terminate_on_exit = initialize();
-
 	if(argc < 2) {
 		print_help(stderr);
 		goto err0;
 	}
-
 	char *p = str_lower(argv[1]);
 
 	sqlite3_initialize();
