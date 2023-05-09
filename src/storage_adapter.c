@@ -27,14 +27,13 @@ static int insert_feel(storage_interface const * adapter, char const * feel, cha
 static int delete_feel(storage_interface const * adapter, int id, int * affected_rows);
 static int count_feels(storage_interface const * adapter);
 
-static int insert_memo(storage_interface const * adapter, char const * memo, int * affected_rows);
-static int delete_memo(storage_interface const * adapter, int id, int * affected_rows);
-
 static int export(storage_interface const * adapter, kvp_handler kvp);
+
+static int insert_memo(storage_interface const * adapter, char const * memo, int * affected_rows);
 
 static int get_escape_character_count(unsigned char const * source, size_t source_len);
 
-static int delete_from_table_by_id(storage_interface const * adapter, char const * table_name,  int id, int * affected_rows);
+static int delete_by_id(storage_interface const * adapter, char const * table_name,  int id, int * affected_rows);
 
 typedef struct storage_adapter_data {
 	sqlite3 *db;
@@ -63,11 +62,12 @@ storage_interface const * storage_adapter_init(storage_interface * adapter) {
 	adapter->insert_feel = &insert_feel;
 	adapter->delete_feel = &delete_feel;
 	adapter->count_feels = &count_feels;
-	
+
 	adapter->insert_memo = &insert_memo;
-	adapter->delete_memo = &delete_memo;
 
 	adapter->export = &export;
+
+	adapter->delete_by_id = &delete_by_id;
 
 	return adapter;
 }
@@ -254,12 +254,8 @@ err0:
 	return rc == SQLITE_OK;
 }
 
-static int delete_memo(storage_interface const * adapter, int id, int * affected_rows) {
-	return delete_from_table_by_id(adapter, "hif_memos", id, affected_rows);
-}
-
 static int delete_feel(storage_interface const * adapter, int id, int * affected_rows) {
-	return delete_from_table_by_id(adapter, "hif_feels", id, affected_rows);
+	return delete_by_id(adapter, "hif_feels", id, affected_rows);
 }
 
 static int query_table_row_count(sqlite3 * db, const char * table_name) {
@@ -470,7 +466,7 @@ static int is_table_name_valid(char const * table_name) {
 	return found;
 }
 
-static int delete_from_table_by_id(storage_interface const * adapter, char const * table_name,  int id, int * affected_rows) {
+static int delete_by_id(storage_interface const * adapter, char const * table_name,  int id, int * affected_rows) {
 	int found = is_table_name_valid(table_name);
 	if(!found) abort();
 

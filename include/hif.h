@@ -2,7 +2,7 @@
 #define HIF_HIF
 
 #define HIF_EXECUTABLE "hif"
-#define HIF_VERSION "v1.0.0"
+#define HIF_VERSION "v0.0.1"
 
 typedef enum hif_command {
 	HIF_COMMAND_CREATE,
