@@ -56,8 +56,6 @@ static char * str_lower(char * s) {
 	return s;
 }
 
-
-
 static int query_command(sqlite3 * db, void * payload) {
 	sqlite3_stmt * stmt = NULL;
 	char * sql = "select * from hif_feels;";
@@ -160,20 +158,6 @@ static int initialize() {
 	return ret;
 }
 
-char const * get_emote_for_feel(hif_feel feel) {
-	switch(feel) {
-		case HIF_BAD:
-			return ":(";
-		case HIF_MEH:
-			return ":|";
-		case HIF_WOO:
-			return ":)";
-		default:
-			return "¯\\_(ツ)_/¯";
-	}
-
-}
-
 int main(int argc, char **argv) {
 	sqlite3 * db = NULL;
 	char * err_msg = NULL, * sql = NULL;
@@ -190,17 +174,15 @@ int main(int argc, char **argv) {
 
 	sqlite3_initialize();
 
-	hif_feel feel = str_to_command(p);
-
-	assert((feel >= HIF_BAD && feel <= HIF_WOO) || (feel & HIF_COMMAND));
-
+	hif_feel command = str_to_command(p);
+	
 	storage_adapter const * adapter = storage_adapter_alloc();
 	if(!context_exists("hif.db")) {
 		adapter->create_storage(adapter, "hif.db");
 	}
 	adapter->open_storage(adapter, "hif.db");
 
-	if(feel & HIF_COMMAND_INIT) {
+	if(command & HIF_COMMAND_INIT) {
 		const char * path = NULL;
 		if(argc >= 3) {
 			path = argv[2];
@@ -208,18 +190,19 @@ int main(int argc, char **argv) {
 		adapter->create_storage(adapter, path);
 		fprintf(stdout, "Created context %s\n", path);
 	}
-	else if(feel & HIF_COMMAND_ADD) {
-		adapter->insert_feel(adapter, feel);
-		fprintf(stdout, "Feels added %s\n", get_emote_for_feel(feel));
+	else if(command & HIF_COMMAND_ADD) {
+		char * description = NULL;
+		adapter->insert_feel(adapter, argv[2], &description);
+		fprintf(stdout, "Feels added %s\n", description ? description : ":)");
 	}
-	else if(feel & HIF_COMMAND_COUNT) {
+	else if(command & HIF_COMMAND_COUNT) {
 		int count = adapter->count_feels(adapter);
 		fprintf(stdout, "%i\n", count);
 	}
-	else if(feel & HIF_COMMAND_JSON) {
+	else if(command & HIF_COMMAND_JSON) {
 		/* rc = ommand.command(db, NULL); */
 	}
-	else if(feel & HIF_COMMAND_DELETE) {
+	else if(command & HIF_COMMAND_DELETE) {
 		if(argc < 3) {
 			print_help(stderr);
 			goto err1;
@@ -227,7 +210,7 @@ int main(int argc, char **argv) {
 		int id = atoi(argv[2]);
 		adapter->delete_feel(adapter, id);
 	}
-	else if(feel & HIF_COMMAND_CREATE_FEEL) {
+	else if(command & HIF_COMMAND_CREATE_FEEL) {
 		if(argc < 3) {
 			print_help(stderr);
 			goto err1;
