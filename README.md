@@ -3,6 +3,9 @@
 An emotional command line interface.
 
 ## What?
+
+![shrug](/media/shrug.png?raw=true "shrug")
+
 I needed a quick and easy interface to track my thoughts and feelings throughout
 the day via the CLI in a way that felt natural to me. I spend a large portion of 
 my day on the CLI, so I created `hif` to help me document my feelings over time.
