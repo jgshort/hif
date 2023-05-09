@@ -226,7 +226,7 @@ static void command_delete_memo(storage_interface const * adapter, int argc, cha
 
 	memo_repository_interface const * repository = memo_repository_alloc(adapter);
 	int rc = repository->delete_memo(repository, id, &affected_rows);
-
+	repository->free(repository);
 	if(!rc || affected_rows == 0) {
 		fprintf(stderr, "Nothing to delete, memo id %i is not present!\n", (int)id);
 	} else {
