@@ -1,9 +1,16 @@
+#include <pwd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
 #include <sqlite3.h>
+
+#define HIF_EXECUTABLE "hif"
+#define HIF_VERSION "v1.0.0"
 
 typedef int (*fn_command)(sqlite3 * db, void * payload);
 
@@ -19,14 +26,25 @@ typedef struct hif_command {
 	fn_command command;
 } hif_command;
 
-static void print_help(FILE *out) {
+typedef struct hif_init_payload {
+	sqlite3 **db;
+	char * path;
+} hif_init_payload;
+
+static void print_version(FILE * out) {
+	fprintf(out, HIF_EXECUTABLE " " HIF_VERSION "\n");
+}
+
+static void print_help(FILE * out) {
+	print_version(out);	
+	fprintf(out, "usage: hif [mood | command (args)*]\n\n");
 	if(out == stderr) {
-		fprintf(out, "Sorry bud, you need to tell me how you feel today.\n");
-		fprintf(out, "Try one of these:\n");
-		fprintf(out, "- bad\n- meh\n- woo\n\n");
+		fprintf(out, "Sorry bud, you need to tell me how you feel.\n");
+		fprintf(out, "I support the following moods:\n");
+		fprintf(out, "\tbad, meh, woo\n\n");
 		fprintf(out, "Example:\n");
-		fprintf(out, "\t$ hif woo\n\n");
-		fprintf(out, "\nOr try:\n");
+		fprintf(out, "\t$ hif woo\n");
+		fprintf(out, "\nOr try a command:\n");
 	}
 	fprintf(out, "\tcount        - Return a count of feels.\n");
 	fprintf(out, "\tjson         - Dump feels in json format.\n");
@@ -36,54 +54,37 @@ static void print_help(FILE *out) {
 	fprintf(out, "\n");
 }
 
-static int create_table_fn(void *data, int argc, char **argv, char **col) {
-	data = data;
-	int i;
-	for(i = 0; i < argc; i++) {
-		fprintf(stdout, "%s = %s\n", col[i], argv[i] ? argv[i] : "NULL");
-	}
-	fprintf(stdout, "\n");
+static int create_table_fn(void * data, int argc, char **argv, char **col) {
 	return 0;
 }
 
 static int insert_fn(void *data, int argc, char **argv, char **col) {
-	data = data;
-	int i;
-	for(i = 0; i<argc; i++) {
-		printf("%s = %s\n", col[i], argv[i] ? argv[i] : "NULL");
-	}
-	printf("\n");
 	return 0;
 }
 
 static int delete_fn(void *data, int argc, char **argv, char **col) {
-	data = data;
-	int i;
-	for(i = 0; i < argc; i++) {
-		fprintf(stdout, "%s = %s\n", col[i], argv[i] ? argv[i] : "NULL");
-	}
-	fprintf(stdout, "Delete\n");
 	return 0;
 }
 
 static int select_fn(void *data, int argc, char **argv, char **col){
-   	int i;
 	fprintf(stdout, "\t\t{");
-   	for(i = 0; i<argc; i++){
+   	for(int i = 0; i<argc; i++){
 		fprintf(stdout, "'%s': '%s'", col[i], argv[i] ? argv[i] : "NULL");
-		if(i < argc - 1) fprintf(stdout, ", ");
+		if(i < argc - 1) {
+			fprintf(stdout, ", ");
+		}
    	}
 	fprintf(stdout, "}\n");
    	return 0;
 }
 
 static char * str_lower(char * s) {
-	char *p = s;
-	for ( ; *p; ++p) { *p = tolower(*p); }
+	char * p = s;
+	for (; *p; ++p) { *p = tolower(*p); }
 	return s;
 }
 
-static int insert_command(sqlite3 *db, void *payload) {
+static int insert_command(sqlite3 * db, void * payload) {
 	char * sql = NULL;
 	int rc = SQLITE_OK;
 	char * err_msg;
@@ -96,10 +97,10 @@ static int insert_command(sqlite3 *db, void *payload) {
 	return rc;
 }
 
-static int query_table_row_count(sqlite3 *db, const char * table_name) {
+static int query_table_row_count(sqlite3 * db, const char * table_name) {
 	int count = -1;
 	char * sql = NULL;
-	sqlite3_stmt *stmt = NULL;
+	sqlite3_stmt * stmt = NULL;
 
 	asprintf(&sql, "select count(*) from %s;", table_name);
 
@@ -119,19 +120,42 @@ err0:
 	return count;
 }
 
-static int count_command(sqlite3 * db, void *payload) {
+static int init_command(sqlite3 * db, void * payload) {
+	char * err_msg = NULL;
+	hif_init_payload * init_payload = (hif_init_payload*)payload;
+
+	if(!init_payload->path) init_payload->path = "hif.db";
+
+	int rc = sqlite3_open(init_payload->path, init_payload->db);
+	if(rc != SQLITE_OK) goto err0;
+
+	char * sql = "create table if not exists hif_feels (feel_id integer primary key, feel int, dtm int);" \
+		"create index if not exists hif_feels_feel_inx on hif_feels(feel);";
+
+	rc = sqlite3_exec(db, sql, &create_table_fn, 0, &err_msg);	
+	if(rc != SQLITE_OK) goto err1;
+
+	goto err0;
+err2:
+err1:
+err0:
+	return rc;
+}
+
+static int count_command(sqlite3 * db, void * payload) {
 	payload = payload;
 	int count = query_table_row_count(db, "hif_feels");
 	fprintf(stdout, "%i\n", count);	
 	return count;
 }
 
-static int delete_command(sqlite3 *db, void *payload) {
-	int id = (int)payload;
+static int delete_command(sqlite3 * db, void * payload) {
 	char * err_msg = NULL;
 	char * sql = NULL;
 
-	asprintf(&sql, "delete from hif_feels where feel_id = %i; " \
+	int id = (int)payload;
+	asprintf(&sql, 
+		"delete from hif_feels where feel_id = %i; " \
 		" select feel_id from hif_feels where feel_id = %i;", id, id);
 	int rc = sqlite3_exec(db, sql, &delete_fn, 0, &err_msg);
 	
@@ -146,8 +170,8 @@ static int delete_command(sqlite3 *db, void *payload) {
 	return rc;
 }
 
-static int query_command(sqlite3 *db, void *payload) {
-	sqlite3_stmt *stmt = NULL;
+static int query_command(sqlite3 * db, void * payload) {
+	sqlite3_stmt * stmt = NULL;
 	char * sql = "select * from hif_feels;";
 		
 	int count = query_table_row_count(db, "hif_feels");
@@ -167,7 +191,7 @@ static int query_command(sqlite3 *db, void *payload) {
 
 		fprintf(stdout, "\t\t{ ");
 		while(col < col_count) {
-			const char *data = NULL;
+			const char * data = NULL;
 			const int feel_col = 1;
 
 			data = (const char *)sqlite3_column_name(stmt, col);
@@ -212,26 +236,29 @@ static hif_command str_to_command(const char * s) {
 	hif_command command;
 	
 	command.command = &insert_command;
-	if(strncmp(s, "meh", 3) == 0) {
+	if(strncmp(s, "meh", sizeof("meh") - 1) == 0) {
 		command.feel = HIF_MEH;
-	} else if(strncmp(s, "woo", 3) == 0) {
+	} else if(strncmp(s, "woo", sizeof("woo") - 1) == 0) {
 		command.feel = HIF_WOO;
-	} else if(strncmp(s, "bad", 3) == 0) {
+	} else if(strncmp(s, "bad", sizeof("bad") - 1) == 0) {
 		command.feel = HIF_BAD;
-	} else if(strncmp(s, "json", 5) == 0) {
+	} else if(strncmp(s, "json", sizeof("json") - 1) == 0) {
 		command.feel = HIF_COMMAND;
 		command.command = &query_command;
-	} else if(strncmp(s, "delete", 6) == 0) {
+	} else if(strncmp(s, "delete", sizeof("delete") - 1) == 0) {
 		command.feel = HIF_COMMAND;
 		command.command = &delete_command;
-	} else if(strncmp(s, "count", 5) == 0) {
+	} else if(strncmp(s, "count", sizeof("count") - 1) == 0) {
 		command.feel = HIF_COMMAND;
 		command.command = &count_command;
-	} else if(strncmp(s, "help", 4) == 0) {
+	} else if(strncmp(s, "help", sizeof("help") - 1) == 0) {
 		print_help(stdout);
 		exit(0);
+	} else if(strncmp(s, "init", sizeof("init") - 1) == 0) {
+		command.feel = HIF_COMMAND;
+		command.command = &init_command;
 	} else if(strncmp(s, "version", 7) == 0) {
-		fprintf(stdout, "hif v1.0.0\n");
+		print_version(stdout);
 		exit(0);
 	} else {
 		print_help(stderr);
@@ -241,11 +268,35 @@ static hif_command str_to_command(const char * s) {
 	return command;
 }
 
+static const char * get_user_home() {
+	const char * env_home = getenv("HOME");
+	if(!env_home) {
+		struct passwd *pw = getpwuid(getuid());
+		env_home = pw->pw_dir;
+	}
+	return env_home;
+}
+
+static void ensure_config_path() {
+	char * config_path = NULL;
+	const char * home = get_user_home();
+
+	asprintf(&config_path, "%s/.config/hif", home);
+	
+	free(config_path);
+	struct stat st = {0};
+	if (stat(config_path, &st) == -1) {
+		mkdir(config_path, 0700);
+	}
+}
+
 int main(int argc, char **argv) {
-	sqlite3 *db = NULL;
-	char * err_msg = NULL, *sql = NULL;
+	sqlite3 * db = NULL;
+	char * err_msg = NULL, * sql = NULL;
 	int rc = 0, ret = -1;
 	hif_command command;
+
+	ensure_config_path();
 
 	if(argc < 2) {
 		print_help(stderr);
@@ -254,26 +305,23 @@ int main(int argc, char **argv) {
 
 	char *p = str_lower(argv[1]);
 
-	hif_feel feel;
+	sqlite3_initialize();
+
 	command = str_to_command(p);
-	feel = command.feel;
+	hif_feel feel = command.feel;
 
 	assert((feel >= HIF_BAD && feel <= HIF_WOO) || (feel == HIF_COMMAND));
 
-	
-	sqlite3_initialize();
-	rc = sqlite3_open("hif.db", &db);
-	if(rc) goto err0;
-
-	assert(db);
-
-	sql = "create table if not exists hif_feels (feel_id integer primary key, feel int, dtm int);" \
-		"create index if not exists hif_feels_feel_inx on hif_feels(feel);";
-
-	rc = sqlite3_exec(db, sql, &create_table_fn, 0, &err_msg);	
-	if(rc != SQLITE_OK) goto err1;
-
-	if(command.command == &insert_command) {
+	if(command.command == &init_command) {
+		hif_init_payload payload;
+		payload.db = &db;
+		payload.path = NULL;
+		if(argc >= 3) {
+			payload.path = argv[2];
+		}
+		rc = command.command(db, &payload);
+	}
+	else if(command.command == &insert_command) {
 		rc = command.command(db, (void*)feel);
 		fprintf(stdout, "Feels added");
 		switch(command.feel) {
