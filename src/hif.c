@@ -7,6 +7,7 @@
 
 #include "hif.h"
 #include "environment.h"
+#include "memo_repository.h"
 #include "storage_adapter.h"
 
 typedef int (*fn_command)(sqlite3 * db, void * payload);
@@ -22,13 +23,17 @@ static void print_help(FILE * out) {
 		fprintf(out, "Sorry bud, you need to tell me how you feel.\n");
 		fprintf(out, "\nOr try a command:\n");
 	}
-	fprintf(out, "\nJournaling Commands\n");
-	fprintf(out, "\tadd {emotion}        - Journal a new feel with {emotion}.\n");
+	fprintf(out, "\nEmotion Commands\n");
+	fprintf(out, "\tadd {emotion}        - Journal a new {emotion} feel.\n");
 	fprintf(out, "\t                       alias +, i.e. $ hif +sad\n");
-	fprintf(out, "\tdelete-feel {id}     - Delete a feel by id,\n");
-	
+	fprintf(out, "\tdelete-feel {id}     - Delete a feel by id.\n");
+
+	fprintf(out, "\nJournaling Commands\n");
+	fprintf(out, "\tmemo {memo}          - Add a memo.\n");
+	fprintf(out, "\tdelete-memo {memo-id}- Delete a memo by id.\n");
+
 	fprintf(out, "\nMetadata Commands\n");
-	fprintf(out, "\tdescribe-feel {feel} - Describe a feel\n");
+	fprintf(out, "\tdescribe-feel {feel} - Describe a feel.\n");
 	fprintf(out, "\tcreate-emotion       - Create a new emotion.\n");
 	fprintf(out, "\tcount-feels          - Return a count of feels.\n");
 	fprintf(out, "\tcreate-context       - Create a new feels context database.\n");
@@ -42,7 +47,7 @@ static void print_help(FILE * out) {
 	fprintf(out, "Examples:\n");
 	fprintf(out, "\n");
 	fprintf(out, "Creating a new emotion:\n");
-	fprintf(out, "$ hif create-emotion \"love\" \"😍 Nothing but love!\"\n");
+	fprintf(out, "$ hif create-emotion \"love\" \"I love you\"\n");
 
 	fprintf(out, "\n");
 	fprintf(out, "Journaling a happy feel:\n");
@@ -58,24 +63,31 @@ static char * str_lower(char * s) {
 }
 
 static hif_command str_to_command(const char * s) {
-	if(*s == '+' || strncmp(s, "add", sizeof("add") - 1) == 0) {
+	const size_t MAX_COMMAND_LENGTH = sizeof("describe-feel") - 1;
+
+	size_t len = strnlen(s, MAX_COMMAND_LENGTH);
+	if(*s == '+' || strncmp(s, "add", len) == 0) {
 		return HIF_COMMAND_ADD_FEEL;
-	} else if(strncmp(s, "describe-feel", sizeof("describe-feel") - 1) == 0) {
+	} else if(strncmp(s, "describe-feel", len) == 0) {
 		return HIF_COMMAND_GET_FEEL_DESCRIPTION;
-	} else if(strncmp(s, "export-json", sizeof("export-json") - 1) == 0) {
+	} else if(strncmp(s, "export-json", len) == 0) {
 		return HIF_COMMAND_JSON;
-	} else if(strncmp(s, "delete-feel", sizeof("delete-feel") - 1) == 0) {
+	} else if(strncmp(s, "delete-feel", len) == 0) {
 		return HIF_COMMAND_DELETE_FEEL;
-	} else if(strncmp(s, "count-feels", sizeof("count-feels") - 1) == 0) {
+	} else if(strncmp(s, "count-feels", len) == 0) {
 		return HIF_COMMAND_COUNT_FEELS;
-	} else if(strncmp(s, "create-context", sizeof("create-context") - 1) == 0) {
+	} else if(strncmp(s, "create-context", len) == 0) {
 		return HIF_COMMAND_CREATE;
-	} else if(strncmp(s, "create-emotion", sizeof("create-emotion") - 1) == 0) {
+	} else if(strncmp(s, "create-emotion", len) == 0) {
 		return HIF_COMMAND_CREATE_FEEL;
-	} else if(strncmp(s, "help", sizeof("help") - 1) == 0) {
+	} else if(strncmp(s, "memo", len) == 0) {
+		return HIF_COMMAND_ADD_MEMO;
+	} else if(strncmp(s, "delete-memo", len) == 0) {
+		return HIF_COMMAND_DELETE_MEMO;
+	} else if(strncmp(s, "help", len) == 0) {
 		print_help(stdout);
 		exit(0);
-	} else if(strncmp(s, "version", sizeof("version") - 1) == 0) {
+	} else if(strncmp(s, "version", len) == 0) {
 		print_version(stdout);
 		exit(0);
 	} else {
@@ -99,7 +111,7 @@ static int initialize() {
 	return ret;
 }
 
-static void command_create(storage_adapter const * adapter, int argc, char **argv) {
+static void command_create(storage_interface const * adapter, int argc, char **argv) {
 	const char * path = NULL;
 	if(argc >= 3) {
 		path = argv[2];
@@ -108,7 +120,7 @@ static void command_create(storage_adapter const * adapter, int argc, char **arg
 	fprintf(stdout, "Created context %s\n", path);
 }
 
-static void command_count_feels(storage_adapter const * adapter, int argc, char **argv) {
+static void command_count_feels(storage_interface const * adapter, int argc, char **argv) {
 	(void)argc;
 	(void)argv;
 
@@ -116,7 +128,7 @@ static void command_count_feels(storage_adapter const * adapter, int argc, char 
 	fprintf(stdout, "%i\n", count);
 }
 
-static void command_add_feel(storage_adapter const * adapter, int argc, char **argv) {
+static void command_add_feel(storage_interface const * adapter, int argc, char **argv) {
 	if(argc < 2) {
 		print_help(stderr);
 		exit(-1);
@@ -144,12 +156,12 @@ static void command_add_feel(storage_adapter const * adapter, int argc, char **a
 	if(description) free(description), description = NULL;
 }
 
-static void command_export(storage_adapter const * adapter, int argc, char **argv) {
+static void command_export(storage_interface const * adapter, int argc, char **argv) {
 	(void)argc; (void)argv;
 	adapter->export(adapter, NULL);
 }
 
-static void command_delete_feel(storage_adapter const * adapter, int argc, char **argv) {
+static void command_delete_feel(storage_interface const * adapter, int argc, char **argv) {
 	if(argc < 3) {
 		print_help(stderr);
 		exit(1);
@@ -165,7 +177,7 @@ static void command_delete_feel(storage_adapter const * adapter, int argc, char 
 	}
 }
 
-static void command_create_feel(storage_adapter const * adapter, int argc, char **argv) {
+static void command_create_feel(storage_interface const * adapter, int argc, char **argv) {
 	if(argc < 3) {
 		print_help(stderr);
 		exit(-1);
@@ -184,15 +196,46 @@ static void command_create_feel(storage_adapter const * adapter, int argc, char 
 	}
 }
 
-static void command_count_memos(storage_adapter const * adapter, int argc, char **argv) {
+static void command_count_memos(storage_interface const * adapter, int argc, char **argv) {
 	(void)adapter; (void)argc; (void)argv;
 }
 
-static void command_add_memo(storage_adapter const * adapter, int argc, char **argv) {
-	(void)adapter; (void)argc; (void)argv;
+static void command_add_memo(storage_interface const * adapter, int argc, char **argv) {
+	if(argc < 3) {
+		print_help(stderr);
+		exit(-1);
+	}
+
+	char const * memo = argv[2];
+
+	int affected_rows;
+	int rc = adapter->insert_memo(adapter, memo, &affected_rows);
+
+	if(!rc) {
+		fprintf(stderr, "Failed to add memo.\n");
+	} else {
+		fprintf(stdout, "Added new memo, '%s'\n", memo);
+	}
 }
 
-static void command_get_feel_description(storage_adapter const * adapter, int argc, char **argv) {
+static void command_delete_memo(storage_interface const * adapter, int argc, char **argv) {
+	if(argc < 3) {
+		print_help(stderr);
+		exit(1);
+	}
+	int id = atoi(argv[2]);
+	int affected_rows = 0;
+	int rc = adapter->delete_memo(adapter, id, &affected_rows);
+
+	if(!rc || affected_rows == 0) {
+		fprintf(stderr, "Nothing to delete, memo id %i is not present!\n", (int)id);
+	} else {
+		fprintf(stdout, "Memo deleted!\n");
+	}
+
+}
+
+static void command_get_feel_description(storage_interface const * adapter, int argc, char **argv) {
 	if(argc < 3) {
 		print_help(stderr);
 		exit(-1);
@@ -212,7 +255,7 @@ static void command_get_feel_description(storage_adapter const * adapter, int ar
 	free(description), description = NULL;
 }
 
-typedef void (*command_fn)(storage_adapter const * adapter, int argc, char **argv);
+typedef void (*command_fn)(storage_interface const * adapter, int argc, char **argv);
 
 static command_fn fns[] = {
 	&command_create, /* HIF_COMMAND_CREATE */
@@ -223,7 +266,8 @@ static command_fn fns[] = {
 	&command_add_feel, /* HIF_COMMAND_ADD_FEEL */
 	&command_count_memos, /* HIF_COMMAND_COUNT_MEMOS */
 	&command_add_memo, /* HIF_COMMAND_ADD_MEMO */
-	&command_get_feel_description /* HIF_COMMAND_GET_FEEL_DESCRIPTION */
+	&command_get_feel_description, /* HIF_COMMAND_GET_FEEL_DESCRIPTION */
+	&command_delete_memo /* HIF_COMMAND_DELETE_MEMO */
 };
 
 int main(int argc, char **argv) {
@@ -236,7 +280,11 @@ int main(int argc, char **argv) {
 	}
 
 	int ret = -1;
-	storage_adapter const * adapter = NULL;
+	storage_interface const * adapter = NULL;
+	memo_repository_interface const * repository = NULL;
+
+	repository = memo_repository_alloc();
+	repository->free((memo_repository_interface*)repository);
 
 	char *p = str_lower(argv[1]);
 	
@@ -244,6 +292,7 @@ int main(int argc, char **argv) {
 	if((command < HIF_COMMAND_CREATE) || command > HIF_COMMAND_EOF) goto err0;
 
 	adapter = storage_adapter_alloc();
+
 	if(!context_exists(DB)) {
 		ret = adapter->create_storage(adapter, DB);
 		if(ret) goto err0;
@@ -260,7 +309,7 @@ int main(int argc, char **argv) {
 	ret = 0;
 
 err0:
-	if(adapter) adapter->free((storage_adapter *)adapter);
+	if(adapter) adapter->free(adapter);
 	if(call_terminate_on_exit) terminate();
 	
 	return ret;

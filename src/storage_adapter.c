@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -7,20 +8,33 @@
 #include "environment.h"
 #include "storage_adapter.h"
 
-static int create_storage(storage_adapter const * adapter, char const * path);
-static int open_storage(storage_adapter const * adapter, char const * context_name);
-static int close(storage_adapter const * adapter);
+struct storage_adapter_data;
 
-static int create_feel(storage_adapter const * adapter, char const * feel, char const * description);
-static int get_feel_description(storage_adapter const * adapter,  char const * feel, char **description);
+typedef struct storage_adapter {
+	storage_interface _interface;
+	
+	struct storage_adapter_data * data;
+} storage_adapter;
 
-static int insert_feel(storage_adapter const * adapter, char const * feel, char **description);
-static int delete_feel(storage_adapter const * adapter, int id, int * affected_rows);
-static int count_feels(storage_adapter const * adapter);
+static int create_storage(storage_interface const * adapter, char const * path);
+static int open_storage(storage_interface const * adapter, char const * context_name);
+static int close(storage_interface const * adapter);
 
-static int insert_memo(storage_adapter const * adapter, char const * memo);
+static int create_feel(storage_interface const * adapter, char const * feel, char const * description);
+static int get_feel_description(storage_interface const * adapter,  char const * feel, char **description);
 
-static int export(storage_adapter const * adapter, kvp_handler kvp);
+static int insert_feel(storage_interface const * adapter, char const * feel, char **description);
+static int delete_feel(storage_interface const * adapter, int id, int * affected_rows);
+static int count_feels(storage_interface const * adapter);
+
+static int insert_memo(storage_interface const * adapter, char const * memo, int * affected_rows);
+static int delete_memo(storage_interface const * adapter, int id, int * affected_rows);
+
+static int export(storage_interface const * adapter, kvp_handler kvp);
+
+static int get_escape_character_count(unsigned char const * source, size_t source_len);
+
+static int delete_from_table_by_id(storage_interface const * adapter, char const * table_name,  int id, int * affected_rows);
 
 typedef struct storage_adapter_data {
 	sqlite3 *db;
@@ -28,15 +42,15 @@ typedef struct storage_adapter_data {
 	int is_open;
 } storage_adapter_data;
 
-storage_adapter const * storage_adapter_alloc() {
+storage_interface const * storage_adapter_alloc() {
 	storage_adapter * adapter = malloc(sizeof * adapter);
 
-	return storage_adapter_init(adapter);
+	return storage_adapter_init((storage_interface *)adapter);
 }
 
-storage_adapter const * storage_adapter_init(storage_adapter * adapter) {
+storage_interface const * storage_adapter_init(storage_interface * adapter) {
 	storage_adapter_data * data = malloc(sizeof * data);
-	adapter->data = data;
+	((storage_adapter *)adapter)->data = data;
 
 	adapter->create_storage = &create_storage;
 	adapter->open_storage = &open_storage;
@@ -51,23 +65,24 @@ storage_adapter const * storage_adapter_init(storage_adapter * adapter) {
 	adapter->count_feels = &count_feels;
 	
 	adapter->insert_memo = &insert_memo;
+	adapter->delete_memo = &delete_memo;
 
 	adapter->export = &export;
 
 	return adapter;
 }
 
-void storage_adapter_free(storage_adapter * adapter) {
-	if(adapter) {
-		adapter->close(adapter);
-		if(adapter->data) {
-			free(adapter->data), adapter->data = NULL;
-		}
-		free(adapter), adapter = NULL;
+void storage_adapter_free(storage_interface const * adapter) {
+	if(!adapter) return; 
+	
+	adapter->close(adapter);
+	if(((storage_adapter *)adapter)->data) {
+		free(((storage_adapter *)adapter)->data), ((storage_adapter *)adapter)->data = NULL;
 	}
+	free((storage_adapter *)adapter), adapter = NULL;
 }
 
-static int create_storage(storage_adapter const * adapter, char const * context_name) {
+static int create_storage(storage_interface const * adapter, char const * context_name) {
 	char * err_msg = NULL;
 
 	(void)adapter;
@@ -133,12 +148,12 @@ err0:
 	return rc;
 }
 
-static int open_storage(storage_adapter const * adapter, char const * context_name) {
+static int open_storage(storage_interface const * adapter, char const * context_name) {
 	if(!context_name) context_name = "hif.db";
 
 	char * path = alloc_concat_path(get_config_path(), context_name);
 
-	int rc = sqlite3_open(path, &adapter->data->db);
+	int rc = sqlite3_open(path, &((storage_adapter *)adapter)->data->db);
 	if(rc != SQLITE_OK) goto err0;
 
 err0:
@@ -146,10 +161,10 @@ err0:
 	return rc;
 }
 
-static int close(storage_adapter const * adapter) {
+static int close(storage_interface const * adapter) {
 	int ret = -1;
-	if(adapter && adapter->data) {
-		storage_adapter_data * data = adapter->data;
+	if(adapter && ((storage_adapter *)adapter)->data) {
+		storage_adapter_data * data = ((storage_adapter *)adapter)->data;
 		if(data->is_open) {
 			sqlite3 *db = data->db;
 			if(db) {
@@ -162,11 +177,11 @@ static int close(storage_adapter const * adapter) {
 	return ret == SQLITE_OK;;
 }
 
-static int get_feel_description(storage_adapter const * adapter,  char const * feel, char **description) {
+static int get_feel_description(storage_interface const * adapter,  char const * feel, char **description) {
 	char const * sql = "select description from hif_statuses where status = ?;";
 
 	sqlite3_stmt * stmt = NULL;
-	int rc = sqlite3_prepare_v2(adapter->data->db, sql, -1, &stmt, NULL);
+	int rc = sqlite3_prepare_v2(((storage_adapter *)adapter)->data->db, sql, -1, &stmt, NULL);
 	if(rc != SQLITE_OK) goto err0;
 
 	rc = sqlite3_bind_text(stmt, 1, feel, -1, SQLITE_STATIC);
@@ -186,7 +201,7 @@ err0:
 	return rc;
 }
 
-static int insert_feel(storage_adapter const * adapter, char const * feel, char **description) {
+static int insert_feel(storage_interface const * adapter, char const * feel, char **description) {
 	char const * sql = "insert into hif_feels (feel, dtm) values (" \
 		"(select status_id from hif_statuses where status = ?), datetime('now')" \
 		");";
@@ -194,7 +209,7 @@ static int insert_feel(storage_adapter const * adapter, char const * feel, char 
 	if(!feel) return -1;
 	
 	sqlite3_stmt * stmt = NULL;
-	int rc = sqlite3_prepare_v2(adapter->data->db, sql, -1, &stmt, NULL);
+	int rc = sqlite3_prepare_v2(((storage_adapter *)adapter)->data->db, sql, -1, &stmt, NULL);
 	if(rc != SQLITE_OK) goto err0;
 
 	rc = sqlite3_bind_text(stmt, 1, feel, -1, SQLITE_STATIC);
@@ -212,13 +227,13 @@ err0:
 	return rc == SQLITE_OK;
 }
 
-static int create_feel(storage_adapter const * adapter, char const * feel, char const * description) {
+static int create_feel(storage_interface const * adapter, char const * feel, char const * description) {
 	char const * sql = "insert into hif_statuses (status, description) values (?, ?);";
 	
 	if(!feel) return -1;
 	
 	sqlite3_stmt * stmt = NULL;
-	int rc = sqlite3_prepare_v2(adapter->data->db, sql, -1, &stmt, NULL);
+	int rc = sqlite3_prepare_v2(((storage_adapter *)adapter)->data->db, sql, -1, &stmt, NULL);
 	if(rc != SQLITE_OK) goto err0;
 
 	rc = sqlite3_bind_text(stmt, 1, feel, -1, SQLITE_STATIC);
@@ -239,28 +254,12 @@ err0:
 	return rc == SQLITE_OK;
 }
 
-static int delete_feel(storage_adapter const * adapter, int id, int * affected_rows) {
-	char const * sql = "delete from hif_feels where feel_id = ?;";
-	
-	sqlite3_stmt * stmt = NULL;
-	int rc = sqlite3_prepare_v2(adapter->data->db, sql, -1, &stmt, NULL);
-	if(rc != SQLITE_OK) goto err0;
+static int delete_memo(storage_interface const * adapter, int id, int * affected_rows) {
+	return delete_from_table_by_id(adapter, "hif_memos", id, affected_rows);
+}
 
-	rc = sqlite3_bind_int(stmt, 1, id);
-	if(rc != SQLITE_OK) goto err1;
-
-	rc = sqlite3_step(stmt);
-	if(rc != SQLITE_DONE) goto err1;
-
-	*affected_rows = sqlite3_changes(adapter->data->db);
-
-	rc = SQLITE_OK;
-
-err1:
-	sqlite3_finalize(stmt);
-
-err0:
-	return rc == SQLITE_OK;
+static int delete_feel(storage_interface const * adapter, int id, int * affected_rows) {
+	return delete_from_table_by_id(adapter, "hif_feels", id, affected_rows);
 }
 
 static int query_table_row_count(sqlite3 * db, const char * table_name) {
@@ -286,8 +285,8 @@ err0:
 	return count;
 }
 
-static int count_feels(storage_adapter const * adapter) {
-	int count = query_table_row_count(adapter->data->db, "hif_feels");
+static int count_feels(storage_interface const * adapter) {
+	int count = query_table_row_count(((storage_adapter *)adapter)->data->db, "hif_feels");
 	return count;
 }
 
@@ -302,10 +301,7 @@ static int to_kvp(char const * key, char const * value, int is_numeric) {
 	return 0;
 }
 
-static char * alloc_json_escape_string(unsigned char const * source) {
-	if(!source) return NULL;
-
-	size_t source_len = strlen((char const *)source) + 1;
+static int get_escape_character_count(unsigned char const * source, size_t source_len) {
 	size_t len = source_len;
 
 	unsigned char const * c = source;
@@ -328,6 +324,15 @@ static char * alloc_json_escape_string(unsigned char const * source) {
 		}
 	} while(++c && *c);
 
+	return len;
+}
+
+static char * alloc_json_escape_string(unsigned char const * source) {
+	if(!source) return NULL;
+
+	size_t source_len = strlen((char const *)source) + 1;
+	size_t len = get_escape_character_count(source, source_len);
+	
 	char * dest = malloc(len);
 	if(!dest) return NULL;
 
@@ -338,7 +343,7 @@ static char * alloc_json_escape_string(unsigned char const * source) {
 	}
 
 	char * d = dest;
-	c = source;
+	unsigned char const * c = source;
 	do {
 		switch(*c) {
 			case '\\':
@@ -367,12 +372,12 @@ static char * alloc_json_escape_string(unsigned char const * source) {
 	return dest;
 }
 
-static int export(storage_adapter const * adapter, kvp_handler kvp) {
+static int export(storage_interface const * adapter, kvp_handler kvp) {
 	int count = count_feels(adapter);
 	if(count < 0) { exit(-1); }
 
 	sqlite3_stmt * stmt = NULL;
-	sqlite3 *db = adapter->data->db;
+	sqlite3 *db = ((storage_adapter *)adapter)->data->db;
 
 	if(!kvp) kvp = &to_kvp;
 
@@ -422,16 +427,80 @@ err2:
 	return rc;
 }
 
-static int insert_memo(storage_adapter const * adapter, char const * memo) {
-	char * err_msg = NULL;
+static int insert_memo(storage_interface const * adapter, char const * memo, int * affected_rows) {
+	char const * sql = "insert into hif_memos (memo, dtm) values (?, datetime('now'));";
+
+	sqlite3_stmt * stmt = NULL;
+
+	int rc = sqlite3_prepare_v2(((storage_adapter *)adapter)->data->db, sql, -1, &stmt, NULL);
+	if(rc != SQLITE_OK) goto err0;
+
+	rc = sqlite3_bind_text(stmt, 1, memo, -1, SQLITE_STATIC);
+	if(rc != SQLITE_OK) goto err1;
+
+	rc = sqlite3_step(stmt);
+	if(rc != SQLITE_DONE) goto err1;
+
+	*affected_rows = sqlite3_changes(((storage_adapter *)adapter)->data->db);
+
+	rc = SQLITE_OK;
+err1:
+	sqlite3_finalize(stmt);
+
+err0:
+	return rc == SQLITE_OK;
+}
+
+static int is_table_name_valid(char const * table_name) {
+	/* Assumes *ACCEPTABLE_TABLES is max strlen() of ACCEPTABLE_TABLES[] */
+	const char * ACCEPTABLE_TABLES[] = {"hif_feels", "hif_memos" };
+	const size_t ACCEPTABLE_TABLES_LEN = sizeof(ACCEPTABLE_TABLES) / sizeof(*ACCEPTABLE_TABLES);
+	const size_t MAX_TABLE_NAME_LEN = sizeof(*ACCEPTABLE_TABLES) - 1;
+
+	if(!table_name) return false;
+
+	bool found = false;
+	for(size_t i = 0; i < ACCEPTABLE_TABLES_LEN; i++) {
+		if(strncmp(table_name, ACCEPTABLE_TABLES[i], MAX_TABLE_NAME_LEN) == 0) {
+			found = true;
+			break;
+		}
+	}
+
+	return found;
+}
+
+static int delete_from_table_by_id(storage_interface const * adapter, char const * table_name,  int id, int * affected_rows) {
+	int found = is_table_name_valid(table_name);
+	if(!found) abort();
+
+	int rc = -1;
+
 	char * sql = NULL;
+	asprintf(&sql, "delete from %s where rowid = ?;", table_name);
+	if(!sql) goto err0;
 
-	asprintf(&sql, "insert into hif_memos (memo, dtm) values ('%s', datetime('now'));", memo);
+	sqlite3_stmt * stmt = NULL;
+	rc = sqlite3_prepare_v2(((storage_adapter *)adapter)->data->db, sql, -1, &stmt, NULL);
+	if(rc != SQLITE_OK) goto err1;
 
-	int rc = sqlite3_exec(adapter->data->db, sql, NULL, 0, &err_msg);
+	rc = sqlite3_bind_int(stmt, 1, id);
+	if(rc != SQLITE_OK) goto err2;
 
+	rc = sqlite3_step(stmt);
+	if(rc != SQLITE_DONE) goto err2;
+
+	*affected_rows = sqlite3_changes(((storage_adapter *)adapter)->data->db);
+
+	rc = SQLITE_OK;
+
+err2:
+	sqlite3_finalize(stmt);
+
+err1:
 	free(sql), sql = NULL;
 
-	return rc;
+err0:
+	return rc == SQLITE_OK;
 }
 
